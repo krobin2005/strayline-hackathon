@@ -8,6 +8,42 @@ The schedule, roles and demo script are in the companion file, **`PLAN.md`**.
 
 ---
 
+## Setup (do this first, on every laptop)
+
+### 1. Ollama and the local models
+
+The agents run on a local model, so every laptop that will run or test them needs Ollama and both candidate models. The models are about 15 GB together, so start the download first.
+
+**macOS** (no Homebrew needed):
+1. Download Ollama from https://ollama.com/download, unzip it, and drag `Ollama.app` into Applications.
+2. Open Ollama once. It runs in the menu bar and serves on `localhost:11434`. If it offers to install the `ollama` command line tool, accept.
+3. In Terminal, pull both models:
+   ```bash
+   ollama pull qwen2.5vl:7b
+   ollama pull gemma3:12b
+   ```
+   If `ollama` isn't found, use the full path: `/Applications/Ollama.app/Contents/Resources/ollama pull qwen2.5vl:7b`.
+4. Check: `ollama list` shows both models, and `curl localhost:11434/api/version` returns a version.
+
+**Windows / Linux:** install from https://ollama.com/download, then run the same two `ollama pull` commands.
+
+### 2. Dataset (stays out of git)
+
+Download the improved CIC-IDS2017 (328 MB) and unzip it into `data/raw/`:
+```bash
+mkdir -p data/raw && curl -L -o data/raw/CICIDS2017_improved.zip https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip
+```
+```bash
+cd data/raw && unzip CICIDS2017_improved.zip
+```
+You should end up with `monday.csv` … `friday.csv` (2.1M rows in total). `data/` is git-ignored; never commit it. Or copy the CSVs from Kyle over a USB drive or AirDrop.
+
+### 3. Python
+
+Python 3.11+ with a virtual environment. The `requirements.txt` will be added with the first code; there are no cloud AI SDKs in it, by design.
+
+---
+
 ## 0. Hackathon rules and how this design complies
 
 | Rule (Terms & Conditions) | What it means for Strayline |
