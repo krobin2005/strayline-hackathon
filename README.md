@@ -85,10 +85,11 @@ All open-weight and served by Ollama. **Two models cover all five inputs**, so o
 - Phishing check prompt: sender, link text vs real URL, urgency, requests for credentials or money, branding mismatches. The answer is a verdict with reasons.
 
 ### Audio
-1. **Transcribe** with Whisper (timestamps on).
-2. **Identify sounds** with the audio-capable model (or the classifier fallback): e.g. "speech, phone ring, keyboard, traffic".
-3. **Answer questions** with the text model, from the transcript + sound list.
-- Browser mic recording works too (WebM → WAV on the server).
+All three steps use Gemma 4 E4B, which takes WAV audio directly.
+1. **Transcribe** in ~25-second pieces (Gemma handles short clips best). No speech → "no speech".
+2. **Identify sounds** from the first piece with a prompt listing everyday sound types; clips under 3 s are looped so the model has enough to hear. If the model claims it heard nothing, it retries once with a shorter prompt, then reports "couldn't identify".
+3. **Answer the question** from the transcript and sound list (plus the clip itself when it has speech), pointing out requests for passwords, codes or payment.
+- The page converts mic recordings, MP3 and M4A to 16 kHz WAV in the browser; the server falls back to macOS `afconvert`.
 
 ### Text (documents)
 1. Accept PDF, TXT and Markdown. Split into ~500-word chunks with page numbers.
@@ -155,9 +156,9 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 
 ## 6. Testing ("your own test results")
 
-- **Practice pack** (not scored by the organizers): 25 image, 20 audio, 20 text, 20 code, 15 video items. Kaggle: `bhavyasreepylaa/ieee-ai-hackathon-2026-practice-pack` (needs a Kaggle login; download into `data/practice/`).
+- **Practice pack** (not scored by the organizers): 25 image, 20 audio, 20 text, 20 code, 15 video items in the same format as the Day 3 items, which judges pick at random and answer live with Wi-Fi off. Kaggle: `bhavyasreepylaa/ieee-ai-hackathon-2026-practice-pack` (needs a Kaggle login). **Its rules: never commit the pack or its answers; no fine-tuning; never look up answers in the source datasets' labels.**
 - **Our security set:** phishing screenshots, voicemails we recorded ourselves, our own runbook document, screen recordings we made, and one CIC-IDS2017 day.
-- **Harness:** `python -m desk.eval` runs every item through the same code path as the app and writes `results/test_results.md`: per modality, accuracy (exact match, or our marking where answers are free-form), "not found" accuracy for text, unit-test pass rate for code, and seconds per item.
+- **Harness:** `python -m desk.eval` runs every item through the same handlers as the app and writes `results/test_results.md` (aggregates only). Scoring: code by the pack's own unit tests in the sandbox; unanswerable text questions must say "not in the document"; counts by the number; transcripts by word error rate (≤ 25%); short answers by normalized match; long free-form answers marked "needs review" for a person instead of guessed. Checked on a synthetic stand-in pack: 10/11 (the miss was a pure test tone, see Limits).
 - **Detector:** share of attack connections alerted and the false-alarm rate on the demo day's benign traffic.
 
 *(Results table goes here.)*
@@ -166,8 +167,10 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 
 ## 7. Limits (named, not hidden)
 
-*(Fill from test results.)* Expected:
-- Sound identification is the weakest input.
+*(Update from the practice-pack results.)* So far:
+- Sound identification is the weakest input. Pure synthetic tones often can't be identified (the model may say it heard nothing); real recordings are still to be tested on the practice pack.
+- The first video question after a model switch takes ~50 s while Qwen3-VL loads with a large context; the app pre-loads both models at start, and later questions take ~6 s.
+- On a phone, the mic button is hidden: browsers only allow the mic on secure pages, and the laptop's local address is plain http. Phones can upload a voice memo instead.
 - Counting and fast motion in video depend on frame sampling.
 - Long documents are limited by retrieval quality.
 - Generated code runs only in the sandbox; it's a helper, not an autonomous agent.
@@ -175,53 +178,43 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 
 ---
 
-## 8. Setup
+## 8. Setup and run
 
-### 1. Ollama and models
-**macOS** (no Homebrew needed):
-1. Download Ollama from https://ollama.com/download, unzip it, and drag `Ollama.app` into Applications.
-2. Open Ollama once (it serves on `localhost:11434`). Accept the offer to install the `ollama` command line tool.
-3. Pull the models:
+### On a new laptop (macOS or Linux), once
+1. Install **Python 3.11+** (python.org) and **Ollama** (https://ollama.com/download; on a Mac, unzip it, drag `Ollama.app` into Applications and open it once).
+2. Clone this repo and run:
    ```bash
-   ollama pull qwen3-vl:8b
+   sh setup.sh
    ```
-   ```bash
-   ollama pull gemma4:e4b-it-q4_K_M
-   ```
-   If `ollama` isn't found, use `/Applications/Ollama.app/Contents/Resources/ollama`.
-4. Check: `ollama list` shows them.
+   It creates `.venv`, installs the packages, starts Ollama, downloads the two models (`qwen3-vl:8b` and `gemma4:e4b-it-q4_K_M`, ~13 GB the first time) and checks a model answers. Safe to run again.
 
-**Windows / Linux:** install from https://ollama.com/download, then the same `ollama pull` commands.
+Hardware note: built and tested on an Apple M4 Pro with 24 GB RAM. 16 GB machines should work but slower; under 16 GB, expect long waits.
 
-### 2. Data (never committed; `data/` is git-ignored)
-- **CIC-IDS2017 (improved), 328 MB:**
-  ```bash
-  mkdir -p data/raw && curl -L -o data/raw/CICIDS2017_improved.zip https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip
-  ```
-  ```bash
-  cd data/raw && unzip CICIDS2017_improved.zip
-  ```
-  You should get `monday.csv` … `friday.csv`. Or copy them from Kyle.
-- **Practice pack:** download from Kaggle into `data/practice/`.
-
-### 3. Python
-Python 3.11+ (tested on 3.14):
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-``` Whisper's model downloads once on first run; run it once before going offline.
-
-### 4. Run
+### Every time
 With Ollama open:
 ```bash
 .venv/bin/python -m desk
 ```
-It prints two addresses: `http://localhost:8000` for this laptop, and a `http://<laptop-ip>:8000` address for a phone on the same Wi-Fi or hotspot. The status dot turns green when the local models are reachable.
+It prints `http://localhost:8000` for this laptop and a `http://<laptop-ip>:8000` address for a phone on the same Wi-Fi or hotspot, and loads both models in the background so the first question is fast. The status dot turns green when the models are reachable. No internet is needed after setup.
 
-Working so far: **image, audio (speech + sounds, mic or file), document (with "This isn't in the document."), video, code (written, run in a sandbox, tested)** and plain questions. Logs (the Strayline detector) come next.
+Works now: **image, audio (speech + sounds, mic or file), document (with "This isn't in the document."), video, and code (written, run in a sandbox, tested)**, plus plain questions. Logs (the Strayline detector) are in progress.
 
-Check everything at once (app must be running):
+### Checks
+- Everything at once, app running: `.venv/bin/python tests/smoke_api.py`
+- Practice pack: download it from Kaggle (needs a Kaggle login), unzip into `data/practice/` so that `data/practice/practice_pack/items.json` exists, then:
+  ```bash
+  .venv/bin/python -m desk.eval
+  ```
+  Add `--only audio --limit 5` for a quick run. Writes `results/test_results.md`; per-item answers stay in git-ignored `data/eval/` because the pack must not be published.
+- Harness self-check without the real pack: `.venv/bin/python tests/make_mini_pack.py` then `.venv/bin/python -m desk.eval --pack data/mini_pack --summary data/mini_pack/results.md`
+
+### Data for the detector (only for logs work)
+CIC-IDS2017 improved, 328 MB, git-ignored:
 ```bash
-.venv/bin/python tests/smoke_api.py
+mkdir -p data/raw && curl -L -o data/raw/CICIDS2017_improved.zip https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip
+```
+```bash
+cd data/raw && unzip CICIDS2017_improved.zip
 ```
 
 ---
