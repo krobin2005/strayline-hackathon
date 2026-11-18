@@ -4,11 +4,12 @@
 
 This is the build spec for rebuilding Strayline from scratch at the **IEEE AI Hackathon 2026: Multimodal LLM Challenge** (Roux Institute, Portland ME, Nov 18–20, 2026). It covers the idea, the data, every feature formula, model, threshold rule, ranking rule, agent rule and evaluation protocol, how each event rule changes the original design, and the mistakes to avoid. It contains no code: everything is written during the event, in the team's assigned repo.
 
-The schedule, roles and demo script are in the companion file, **`PLAN.md`**.
+## How we work
 
+We design, build, test, and rehearse together on one laptop at a time. Everyone shares responsibility for each task, whoever is at the keyboard. We use the work listed under P1, P2, and P3 in [PLAN.md](PLAN.md) as a shared checklist. The schedule and demo script are there too.
 ---
 
-## Setup (do this first, on every laptop)
+## Set up the shared laptop
 
 ### 1. Ollama and the local models
 
