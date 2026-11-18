@@ -217,7 +217,12 @@ With Ollama open:
 ```
 It prints two addresses: `http://localhost:8000` for this laptop, and a `http://<laptop-ip>:8000` address for a phone on the same Wi-Fi or hotspot. The status dot turns green when the local models are reachable.
 
-Working so far: image questions, document questions (with "This isn't in the document."), and plain questions. Audio, video, code and logs come next.
+Working so far: **image, audio (speech + sounds, mic or file), document (with "This isn't in the document."), video, code (written, run in a sandbox, tested)** and plain questions. Logs (the Strayline detector) come next.
+
+Check everything at once (app must be running):
+```bash
+.venv/bin/python tests/smoke_api.py
+```
 
 ---
 

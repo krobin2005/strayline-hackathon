@@ -79,6 +79,12 @@ details.evidence p { margin: 6px 0; padding-left: 8px; border-left: 2px solid va
 .attach { flex: none; width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line);
           display: grid; place-items: center; cursor: pointer; font-size: 22px; color: var(--muted); }
 .attach:hover { border-color: var(--muted); }
+.mic { background: none; font-size: 18px; }
+.mic[hidden] { display: none; }
+.mic.recording { border-color: var(--accent); background: var(--accent); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .55; } }
+.msg pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px;
+           overflow-x: auto; white-space: pre; font: 13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 6px 0; }
 textarea { flex: 1; min-height: 44px; max-height: 160px; resize: none; padding: 10px 12px; border-radius: 12px;
            border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: inherit; }
 textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }

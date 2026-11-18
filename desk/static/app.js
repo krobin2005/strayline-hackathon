@@ -58,7 +58,13 @@ function addUserMessage(question, att) {
 function addPending(kind) {
   const el = document.createElement("div");
   el.className = "msg bot typing";
-  const what = { image: "Looking at the image", document: "Reading the document" }[kind] || "Thinking";
+  const what = {
+    image: "Looking at the image",
+    document: "Reading the document",
+    audio: "Listening",
+    video: "Watching the video",
+    code: "Writing and testing code",
+  }[kind] || "Thinking";
   const start = performance.now();
   el.textContent = `${what}…`;
   const timer = setInterval(() => {
@@ -69,9 +75,32 @@ function addPending(kind) {
   return { el, stop: () => clearInterval(timer) };
 }
 
+// Render model text safely: ``` fences become code blocks, **x** becomes bold. No innerHTML.
+function renderText(el, text) {
+  const parts = text.split(/```[a-zA-Z]*\n?/);
+  parts.forEach((part, i) => {
+    if (i % 2 === 1) {
+      const pre = document.createElement("pre");
+      pre.textContent = part.replace(/\n$/, "");
+      el.appendChild(pre);
+      return;
+    }
+    part.split(/(\*\*[^*]+\*\*)/).forEach((bit) => {
+      if (/^\*\*[^*]+\*\*$/.test(bit)) {
+        const b = document.createElement("strong");
+        b.textContent = bit.slice(2, -2);
+        el.appendChild(b);
+      } else if (bit) {
+        el.appendChild(document.createTextNode(bit));
+      }
+    });
+  });
+}
+
 function fillAnswer(el, result) {
   el.className = "msg bot";
-  el.textContent = result.text;
+  el.textContent = "";
+  renderText(el, result.text);
   const meta = document.createElement("div");
   meta.className = "meta";
   meta.textContent = `${result.model} · ${result.seconds.toFixed(1)} s · on this laptop`;
@@ -80,7 +109,9 @@ function fillAnswer(el, result) {
     const d = document.createElement("details");
     d.className = "evidence";
     const s = document.createElement("summary");
-    s.textContent = `Based on ${result.evidence.length} passage${result.evidence.length > 1 ? "s" : ""}`;
+    s.textContent = result.kind === "document"
+      ? `Based on ${result.evidence.length} passage${result.evidence.length > 1 ? "s" : ""}`
+      : "How I got this";
     d.appendChild(s);
     for (const e of result.evidence) {
       const p = document.createElement("p");
@@ -109,15 +140,39 @@ document.getElementById("chip-clear").addEventListener("click", () => {
   input.focus();
 });
 
-fileInput.addEventListener("change", async () => {
-  const file = fileInput.files[0];
-  fileInput.value = "";
-  if (!file) return;
-  const body = new FormData();
-  body.append("file", file);
+// Convert any audio the browser can decode (mic recordings, MP3, M4A...) to 16 kHz mono WAV,
+// which the local audio model reads directly. If decoding fails, the original file is sent and
+// the server converts it.
+async function toWav(blob, name) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const decoded = await new AudioCtx().decodeAudioData(await blob.arrayBuffer());
+  const rate = 16000;
+  const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * rate), rate);
+  const src = offline.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offline.destination);
+  src.start();
+  const samples = (await offline.startRendering()).getChannelData(0);
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const v = new DataView(buffer);
+  const str = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  str(0, "RIFF"); v.setUint32(4, 36 + samples.length * 2, true); str(8, "WAVE");
+  str(12, "fmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, "data"); v.setUint32(40, samples.length * 2, true);
+  samples.forEach((s, i) => v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s)) * 0x7fff, true));
+  return new File([buffer], name.replace(/\.[^.]+$/, "") + ".wav", { type: "audio/wav" });
+}
+
+async function uploadFile(file) {
   chip.hidden = false;
   document.getElementById("chip-kind").textContent = "Uploading";
   document.getElementById("chip-name").textContent = file.name;
+  if (file.type.startsWith("audio/") && file.type !== "audio/wav") {
+    try { file = await toWav(file, file.name); } catch { /* server converts instead */ }
+  }
+  const body = new FormData();
+  body.append("file", file);
   try {
     const r = await fetch("/api/upload", { method: "POST", body });
     const data = await r.json();
@@ -133,7 +188,43 @@ fileInput.addEventListener("change", async () => {
     log.appendChild(el);
     fillError(el, err.message);
   }
+}
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files[0];
+  fileInput.value = "";
+  if (file) uploadFile(file);
 });
+
+// Mic recording. Browsers only allow the mic on secure pages (localhost counts), so on a phone
+// using the laptop's network address the button stays hidden; upload a voice memo instead.
+const micButton = document.getElementById("mic");
+let recorder = null;
+if (navigator.mediaDevices && window.MediaRecorder && window.isSecureContext) {
+  micButton.hidden = false;
+  micButton.addEventListener("click", async () => {
+    if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chunks = [];
+      recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        micButton.classList.remove("recording");
+        micButton.title = "Record audio";
+        const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, "");
+        uploadFile(new File([blob], `recording-${stamp}.webm`, { type: blob.type }));
+      };
+      recorder.start();
+      micButton.classList.add("recording");
+      micButton.title = "Stop recording";
+    } catch {
+      micButton.hidden = true;
+    }
+  });
+}
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -143,7 +234,9 @@ form.addEventListener("submit", async (event) => {
   input.value = "";
   autosize();
   sendButton.disabled = true;
-  const pending = addPending(attachment && attachment.kind);
+  const looksLikeCode = /\b(write|create|generate|implement|build|make)\b.{0,60}\b(function|script|program|code|class|regex|parser|query|snippet|method)\b|\bin python\b/i;
+  const pendingKind = attachment ? attachment.kind : (looksLikeCode.test(question) ? "code" : null);
+  const pending = addPending(pendingKind);
   try {
     const r = await fetch("/api/ask", {
       method: "POST",

@@ -20,5 +20,6 @@ DEFAULT_QUESTION = (
 
 def answer(image: bytes, question: str) -> Answer:
     prompt = question.strip() or DEFAULT_QUESTION
-    text, seconds = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=[image])
+    # Big photos can need more than Ollama's default 4,096-token context.
+    text, seconds = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=[image], context=8192)
     return Answer(text=text, kind=IMAGE, model=llm.VISION_MODEL, seconds=seconds)

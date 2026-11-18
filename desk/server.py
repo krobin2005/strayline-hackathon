@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import llm, router
-from .handlers import document, image, text
+from .handlers import audio, code, document, image, text, video
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD_BYTES = 200 * 1024 * 1024
@@ -71,13 +71,22 @@ def ask(body: Ask):
 
     try:
         if attachment is None:
-            result = text.answer(question)
+            result = code.answer(question) if code.is_code_request(question) else text.answer(question)
         elif attachment.kind == router.IMAGE:
             result = image.answer(attachment.data, question)
         elif attachment.kind == router.DOCUMENT:
             result = document.answer(attachment.data, attachment.name, question)
+        elif attachment.kind == router.AUDIO:
+            result = audio.answer(attachment.data, attachment.name, question)
+        elif attachment.kind == router.VIDEO:
+            result = video.answer(attachment.data, attachment.name, question)
+        elif attachment.kind == router.LOGS and code.is_code_request(question):
+            result = code.answer(question, attachment.name, attachment.data)
         else:
-            raise HTTPException(501, f"{attachment.kind.capitalize()} files aren't supported yet.")
+            raise HTTPException(501, "Log analysis with the Strayline detector isn't built yet. "
+                                     "You can ask me to write code that analyzes this file.")
     except llm.ModelError as e:
         raise HTTPException(503, str(e)) from e
+    except (audio.AudioError, video.VideoError) as e:
+        raise HTTPException(422, str(e)) from e
     return asdict(result)

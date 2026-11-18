@@ -25,9 +25,9 @@
       <ul class="kinds">
         <li><b>Image</b> phishing screenshots, photos, charts</li>
         <li><b>Document</b> runbooks and policies (PDF, TXT, MD)</li>
-        <li><b>Audio</b> voicemails and recordings <i>soon</i></li>
-        <li><b>Video</b> screen recordings <i>soon</i></li>
-        <li><b>Code</b> "write a function that…" <i>soon</i></li>
+        <li><b>Audio</b> voicemails and recordings, or press 🎙</li>
+        <li><b>Video</b> screen recordings and short clips</li>
+        <li><b>Code</b> "write a Python function that…", run and tested</li>
         <li><b>Logs</b> a day of connection logs <i>soon</i></li>
       </ul>
     </section>
@@ -45,6 +45,9 @@
                accept="image/*,audio/*,video/*,.pdf,.txt,.md,.csv,.log">
         <span aria-hidden="true">＋</span><span class="sr">Attach a file</span>
       </label>
+      <button type="button" id="mic" class="attach mic" title="Record audio" hidden>
+        <span aria-hidden="true">🎙</span><span class="sr">Record audio</span>
+      </button>
       <textarea id="question" rows="1" placeholder="Ask a question…"></textarea>
       <button id="send" class="send" type="submit">Ask</button>
     </div>
