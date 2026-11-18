@@ -54,6 +54,11 @@ answer, seconds = llm.chat(llm.GENERAL_MODEL, "Reply with exactly: ready")
 print(f"{llm.GENERAL_MODEL}: {answer!r} in {seconds:.1f}s")
 EOF
 
+if [ -f data/raw/monday.csv ] && [ ! -f data/models/detector.joblib ]; then
+  say "Training the Strayline log detector on CIC-IDS2017 (about 15 s)"
+  .venv/bin/python -m desk.detector train
+fi
+
 say "Done. Start the app with:  .venv/bin/python -m desk"
 echo "Then open http://localhost:8000 (the app also prints an address for phones on the same Wi-Fi)."
 echo "Optional: put the organizers' practice pack in data/practice/ and run  .venv/bin/python -m desk.eval"

@@ -64,6 +64,7 @@ function addPending(kind) {
     audio: "Listening",
     video: "Watching the video",
     code: "Writing and testing code",
+    logs: "Running the Strayline detector on the logs",
   }[kind] || "Thinking";
   const start = performance.now();
   el.textContent = `${what}…`;

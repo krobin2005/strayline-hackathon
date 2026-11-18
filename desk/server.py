@@ -10,10 +10,10 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import llm, router
-from .handlers import audio, code, document, image, text, video
+from .handlers import audio, code, document, image, logs, text, video
 
 STATIC = Path(__file__).parent / "static"
-MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+MAX_UPLOAD_BYTES = 400 * 1024 * 1024  # a full day of CIC-IDS2017 logs is ~290 MB
 
 app = FastAPI(title="Strayline Desk")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -49,7 +49,7 @@ def health():
 async def upload(file: UploadFile = File(...)):
     data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "That file is over 200 MB.")
+        raise HTTPException(413, "That file is over 400 MB.")
     if not data:
         raise HTTPException(400, "That file is empty.")
     kind = router.kind_of(file.filename or "", file.content_type)
@@ -83,8 +83,7 @@ def ask(body: Ask):
         elif attachment.kind == router.LOGS and code.is_code_request(question):
             result = code.answer(question, attachment.name, attachment.data)
         else:
-            raise HTTPException(501, "Log analysis with the Strayline detector isn't built yet. "
-                                     "You can ask me to write code that analyzes this file.")
+            result = logs.answer(body.attachment_id, attachment.data, attachment.name, question)
     except llm.ModelError as e:
         raise HTTPException(503, str(e)) from e
     except (audio.AudioError, video.VideoError) as e:

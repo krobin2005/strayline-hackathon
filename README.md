@@ -197,7 +197,7 @@ With Ollama open:
 ```
 It prints `http://localhost:8000` for this laptop and a `http://<laptop-ip>:8000` address for a phone on the same Wi-Fi or hotspot, and loads both models in the background so the first question is fast. The status dot turns green when the models are reachable. No internet is needed after setup.
 
-Works now: **image, audio (speech + sounds, mic or file), document (with "This isn't in the document."), video, and code (written, run in a sandbox, tested)**, plus plain questions. Logs (the Strayline detector) are in progress.
+Works now: **image, audio (speech + sounds, mic or file), document (with "This isn't in the document."), video, code (written, run in a sandbox, tested), and logs (upload a day of CIC-IDS2017 CSV → ranked incidents + briefing)**, plus plain questions.
 
 ### Checks
 - Everything at once, app running: `.venv/bin/python tests/smoke_api.py`
@@ -208,8 +208,19 @@ Works now: **image, audio (speech + sounds, mic or file), document (with "This i
   Add `--only audio --limit 5` for a quick run. Writes `results/test_results.md`; per-item answers stay in git-ignored `data/eval/` because the pack must not be published.
 - Harness self-check without the real pack: `.venv/bin/python tests/make_mini_pack.py` then `.venv/bin/python -m desk.eval --pack data/mini_pack --summary data/mini_pack/results.md`
 
-### Data for the detector (only for logs work)
-CIC-IDS2017 improved, 328 MB, git-ignored:
+### Data and training for the detector (only for logs)
+CIC-IDS2017 improved, 328 MB zip, git-ignored. After unzipping, train once (~15 s; `setup.sh` does this automatically when the data is there), then try it on Wednesday, a day the classifier never saw:
+```bash
+.venv/bin/python -m desk.detector train
+```
+```bash
+.venv/bin/python -m desk.detector score data/raw/wednesday.csv
+```
+In the app, attach `data/raw/wednesday.csv` (291 MB) and ask "Which incidents should I look at first?".
+
+First result (Wednesday, never seen in training): 490,754 connections → 170,194 alerts → 32 incidents in 26 s; 0.44% of normal connections alerted (budget 2%); 98.3% of DoS connections alerted; the DoS flood is incident #1. The classifier, trained without any DoS, caught 97% of it by generalizing from DDoS; the anomaly score caught the rest.
+
+Download:
 ```bash
 mkdir -p data/raw && curl -L -o data/raw/CICIDS2017_improved.zip https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip
 ```
