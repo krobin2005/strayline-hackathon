@@ -1,411 +1,233 @@
-# Strayline: hackathon build spec
+# Strayline Desk
 
-**Catching the attacks nobody has seen yet.**
+**An offline AI assistant for a small college's IT security team.**
 
-This is the build spec for rebuilding Strayline from scratch at the **IEEE AI Hackathon 2026: Multimodal LLM Challenge** (Roux Institute, Portland ME, Nov 18–20, 2026). It covers the idea, the data, every feature formula, model, threshold rule, ranking rule, agent rule and evaluation protocol, how each event rule changes the original design, and the mistakes to avoid. It contains no code: everything is written during the event, in the team's assigned repo.
+Strayline Desk runs on one laptop with open-weight models and no internet connection. It works with everything a campus security analyst handles in a day: phishing screenshots, scam voicemails, policy documents, scripts, screen recordings and network logs. None of that data ever leaves the building.
+
+Built for the **IEEE AI Hackathon 2026: Multimodal LLM Challenge** (Roux Institute, Portland ME, Nov 18–20, 2026). The schedule, gates and demo scripts are in **[PLAN.md](PLAN.md)**.
+
+> **Status:** design spec. No code yet. Sections marked *(to fill)* get real numbers from our own test runs.
 
 ## How we work
 
-We design, build, test, and rehearse together on one laptop at a time. Everyone shares responsibility for each task, whoever is at the keyboard. We use the work listed under P1, P2, and P3 in [PLAN.md](PLAN.md) as a shared checklist. The schedule and demo script are 
-there too.
+We design, build, test, and rehearse together on one laptop at a time. Everyone shares responsibility for each task, whoever is at the keyboard. We use the work listed in [PLAN.md](PLAN.md) as a shared checklist. The schedule and demo script are there too.
 
 ---
 
-## Set up the shared laptop
+## 1. The user and the problem
 
-### 1. Ollama and the local models
+**User:** the IT security staff of a small college: a handful of people defending thousands of students and staff. *(Real numbers and quotes from our user session go here.)*
 
-The agents run on a local model, so every laptop that will run or test them needs Ollama and both candidate models. The models are about 15 GB together, so start the download first.
+**Problem:** their evidence is sensitive. Logs show who visited what, voicemails and screenshots contain names and accounts, and incident notes describe real people. Pasting any of it into a cloud AI tool sends student and staff data to a third party, so in practice they can't use AI at all. They also handle every kind of input, not just text.
 
-**macOS** (no Homebrew needed):
-1. Download Ollama from https://ollama.com/download, unzip it, and drag `Ollama.app` into Applications.
-2. Open Ollama once. It runs in the menu bar and serves on `localhost:11434`. If it offers to install the `ollama` command line tool, accept.
-3. In Terminal, pull both models:
-   ```bash
-   ollama pull qwen2.5vl:7b
-   ollama pull gemma3:12b
-   ```
-   If `ollama` isn't found, use the full path: `/Applications/Ollama.app/Contents/Resources/ollama pull qwen2.5vl:7b`.
-4. Check: `ollama list` shows both models, and `curl localhost:11434/api/version` returns a version.
+**What Strayline Desk does:** one chat, five kinds of input plus network logs, all answered by local open-weight models. It works offline, costs nothing per request, and can't change its terms or disappear.
 
-**Windows / Linux:** install from https://ollama.com/download, then run the same two `ollama pull` commands.
-
-### 2. Dataset (stays out of git)
-
-Download the improved CIC-IDS2017 (328 MB) and unzip it into `data/raw/`:
-```bash
-mkdir -p data/raw && curl -L -o data/raw/CICIDS2017_improved.zip https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip
-```
-```bash
-cd data/raw && unzip CICIDS2017_improved.zip
-```
-You should end up with `monday.csv` … `friday.csv` (2.1M rows in total). `data/` is git-ignored; never commit it. Or copy the CSVs from Kyle over a USB drive or AirDrop.
-
-### 3. Python
-
-Python 3.11+ with a virtual environment. The `requirements.txt` will be added with the first code; there are no cloud AI SDKs in it, by design.
-
----
-
-## 0. Hackathon rules and how this design complies
-
-| Rule (Terms & Conditions) | What it means for Strayline |
-|---|---|
-| All code developed during the event, in the assigned GitHub repo; no "substantial pre-built implementations" | Nothing is copied from the original `strayline` repo: no code, trained models, cached features, site files or prompts. Only this spec (design, no code) and the public datasets come in. |
-| No external cloud AI services during testing or demo rounds | The agents run on a **local** model through Ollama. No Anthropic, OpenAI or Google API calls anywhere in the runtime path. The app should start and run with Wi-Fi off. |
-| AI "must not serve as underlying intelligence" during the demo | Ask the organizers at kickoff whether a local open-weights model in the pipeline is allowed. If not, ship the ML-only path (§8 fallback) and drop the agent layer. |
-| No hard-coded answers or outputs | The demo runs the pipeline **live** on a log file, and every number on screen comes from that run. Any uploaded CSV or Zeek `conn.log` must work too. |
-| Don't misrepresent originality or capabilities | The README and the pitch say plainly: "the design comes from my prior research (published repo); all code was written at this event." Figures from the prior research are labelled as such (§10), never presented as hackathon results. |
-| Repos become public afterwards; respect dataset licences | No secrets, pitch or investor material, or pilot correspondence in the repo. Cite Engelen et al. 2021 and the CIC datasets. Data stays out of git; the README says how to download it. |
-| README must have install, configuration and run instructions | One-command setup and one-command demo (see the plan file). |
-
-**Email the organizers before you write any code** (ieeestudentbranchportland@gmail.com). Disclose the prior research and ask about local LLMs.
-
----
-
-## 1. The idea in one paragraph
-
-Most ML intrusion detectors only recognize attacks that look like their training data, so a new kind of attack walks straight through. Strayline combines two kinds of detector:
-- an **attack classifier** trained on labelled lab traffic, which knows the attacks we already know;
-- **anomaly detectors that learn the deployed network's own normal traffic**, with no labels needed.
-
-Every connection is scored, alerts are grouped per source host into incidents, and a cheap ranking step picks the ~75 incidents worth an AI's attention. A **local multimodal model** then reads each incident two ways at once: as a structured card, and as a **rendered picture of the incident's traffic** (alerts over time, hosts and ports touched). It decides what to escalate and writes case reports, the way an analyst reads a dashboard.
-
-Alongside the detector it publishes a **catchability map**: a measured table of which attack families it catches and which it misses. That tells a security team where to trust it.
-
-### Why this fits the "Multimodal LLM" theme (and how we prove it)
-
-The LLM isn't decoration. It handles the step the ML can't: deciding which of the remaining incidents is a coherent attack. The multimodal claim is **measured, not asserted**: we run triage on the same incidents as *text only* and as *text + chart*, and report escalation precision and recall for both (§9, protocol 6). If the chart doesn't help, we say so and present the text-only result.
-
-### Targets for this build (measured at the event)
-
-| Metric | Target |
-|---|---|
-| A held-out family (classifier trained without it) caught at a 2% false-alarm budget | DoS ≥ 90%; report every family in the catchability map |
-| Measured false alarms on the replayed day's benign traffic | ≤ 2% |
-| Funnel for one full CIC-IDS2017 day | ~400–550k connections → alerts → incidents → 75 to the AI → ≤ 20 escalations, attack incidents on top |
-| Multimodal ablation | Text + chart precision vs text-only precision, reported honestly |
-| AI cost at demo | $0, all local. Report wall-clock latency per incident instead |
-
-The original research's numbers (87% cross-network and so on) are a reference only (§10).
+| Input | General ability (the challenge checklist) | Security job (our user) |
+|---|---|---|
+| **Image** | Describe a photo and answer questions about it | "Is this email screenshot phishing? What gives it away?" |
+| **Audio** | Transcribe speech, answer questions, identify sounds | A voicemail reported as a scam: transcript, what the caller wants, background sounds |
+| **Text** | Answer questions about a document; say so when the answer isn't there | "Who do we notify about a compromised account?" from the incident-response runbook |
+| **Code** | Write working code from a prompt | "Write a function that finds hosts contacting more than 100 ports in a minute", then run it on a log |
+| **Video** | Describe a short clip and answer questions about it | A screen recording a user sent of a fake "tech support" pop-up, step by step |
+| **Logs** *(our addition)* | | **Strayline detector:** a day of connection logs → ranked incidents → ask about any incident in the chat |
 
 ---
 
 ## 2. Architecture
 
 ```
-connection logs (CIC-IDS2017 CSV, or Zeek conn.log / NetFlow upload)
+Browser (laptop or phone on the same local network; no internet needed)
+   │   one chat: type, upload a file, or record from the mic
+   ▼
+FastAPI server on the laptop
    │
-   ├─ 19 per-connection features (flow-record fields only)
-   ├─ 7 per-host features (one-minute aggregates per source and destination host)
-   ▼
-DETECTOR: three scores per connection
-   A. lab classifier (MLP), inputs rescaled to the site
-   B. kNN distance to the site's normal traffic (flow features only)
-   C. autoencoder reconstruction error on the site's normal traffic (flow + host features)
-   → alert if ANY score passes its threshold; thresholds jointly set so the union of
-     alerts on normal traffic = budget (2%)
-   ▼
-INCIDENTS: alerts grouped per source host, split at 10-minute gaps, keep groups ≥ 10 alerts
-   ▼
-RANKING (no AI): top 50 by alert count  +  up to 25 "low-and-slow" incidents
-   ▼
-RENDER: one PNG per ranked incident (alert timeline, destination-host/port spread, score strip)
-   ▼
-LOCAL MULTIMODAL AGENTS (Ollama, offline):
-   triage (card + chart → decision) → investigator (pre-fetched tool outputs + charts → case report)
-   ▼
-DEMO APP (local web server): live funnel, incident console, chart + rationale, catchability map
+Router (plain code, by file type and request, never an LLM)
+   ├─ image            → vision-language model ──────────────────────────────┐
+   ├─ video            → sample frames (OpenCV) → vision-language model       │
+   ├─ audio            → Whisper transcript + sound identification → LLM      │
+   ├─ document         → chunk + retrieve → LLM, with a "not found" check     ├→ answer
+   ├─ code request     → coder model → run in a sandbox → show code + output  │   + evidence
+   └─ connection logs  → Strayline detector → incidents + charts → LLM        ┘
 ```
 
-**ML-only fallback:** everything above RENDER runs without the LLM. If the local model is disallowed or fails on stage, the app still shows the ranked incident list with the "top unusual features" explanations.
+Design rules:
+- **Fully local.** Ollama serves every model on `localhost`. No cloud AI SDKs are installed, and the app is tested with Wi-Fi off.
+- **Plain-code routing.** File type decides the path, which is fast, predictable and easy to explain.
+- **Show the evidence.** Every answer shows what it was based on: the transcript, the frames, the document passage, the code's output, or the incident's chart.
+- **One model in memory at a time** where possible (24 GB RAM). Model choice is per job (§3).
 
 ---
 
-## 3. Data
+## 3. Models and why
 
-### Datasets
+All open-weight, all run through Ollama except Whisper. Final picks are confirmed by the practice-pack benchmark (§6).
 
-| Name | What | Use |
-|---|---|---|
-| **Improved CIC-IDS2017** (Engelen et al., 2021): `intrusion-detection.distrinet-research.be/CNS2022/` | ~2.1M labelled flows, 5 days (Mon 372k, Tue 322k, Wed 497k, Thu 362k, Fri 548k), CICFlowMeter features | **The core dataset.** Training, held-out-family tests, the live demo |
-| Improved CSE-CIC-IDS2018 (same source, ~10 GB zip) | A different network | **Stretch only:** the cross-network test. Start the download on Day 1 in the background, and only use it if the core is done by Day 2 midday |
+| Job | Model | Why | Backup |
+|---|---|---|---|
+| Images, video frames, incident charts | **Qwen3-VL 8B** (`qwen3-vl:8b`) | Recommended by organizers; strong OCR, counting and chart reading | `qwen2.5vl:7b` |
+| Document QA, audio follow-ups, general text | **Qwen3-VL 8B** | Same model as images, so fewer swaps | `gemma3:12b` |
+| Code | **Qwen2.5-Coder 7B** (`qwen2.5-coder:7b`) | Recommended; fast; strong at Python | `qwen3-coder` |
+| Speech to text | **Whisper** (`faster-whisper`, `small` model) | Recommended; accurate; runs on CPU | `medium` if accuracy is low |
+| Identifying sounds | **Gemma 4** (`gemma4`), if Ollama accepts audio input for it | Recommended for audio | A small local audio classifier (YAMNet or CLAP), or a named limit |
 
-Use the *improved* versions. They fix labelling and feature bugs in the originals, which is also the answer to "isn't CIC-IDS2017 known to be broken?" Say so before a judge asks.
-
-**Dropped from the original spec:** UWF-ZeekData24. Its benign and attack traffic are seven months apart, so it can't test detection, and there's no time for it.
-
-### Labels → families
-
-Map the raw labels to 7 families: **DoS** (Hulk, GoldenEye, Slowloris, Slowhttptest), **DDoS**, **PortScan** (incl. "Infiltration – Portscan"), **BruteForce** (FTP/SSH-Patator), **Botnet**, **WebAttack** (brute force, SQLi, XSS), **Infiltration**.
-
-**Drop:** rows marked "Attempted", Heartbleed (11 flows), and unmapped labels.
-
-### Days and what's on them (2017)
-
-| Day | Contents | Role in this build |
-|---|---|---|
-| Monday | Benign only | Onboarding: the site's "normal" |
-| Tuesday | Brute force | **Dev day** for ranking rules and prompts |
-| Wednesday | DoS family | **Demo day**: replay live with DoS held out of the classifier |
-| Thursday | Web attacks, infiltration | Test day: the low-and-slow queue, the multimodal ablation |
-| Friday | Botnet, port scan, DDoS | Test day: the multimodal ablation, the catchability map |
-
-### Splits
-
-- **Chronological 60/20/20 within each (day × family) group:** train / validation / test.
-- **Thresholds are always set on benign *validation* traffic only.** A detector must never see the attack it's tested on.
-- Prompts and ranking rules are tuned on **Tuesday only**. Wednesday to Friday are touched only for final measurement.
-
-### ⚠ Sampling trap
-
-If you subsample, **compute per-host counts from the full data *before* sampling.** Otherwise attacker hosts look 20× busier than they are.
+**Hardware:** MacBook Pro, Apple M4 Pro, 24 GB RAM, Ollama 0.40.16. *(Seconds per item from §6 go here.)*
 
 ---
 
-## 4. Features
+## 4. How each input works
 
-Use only what a flow record (NetFlow/IPFIX biflow or Zeek `conn.log`) can provide. **Never use IPs, ports or timestamps as model inputs.**
+### Image
+- The image + question go to the vision model. With no question, the default is: describe it, then list anything that looks suspicious if it's a screenshot.
+- Phishing check prompt: sender, link text vs real URL, urgency, requests for credentials or money, branding mismatches. The answer is a verdict with reasons.
 
-### 4a. Per-connection features (19)
+### Audio
+1. **Transcribe** with Whisper (timestamps on).
+2. **Identify sounds** with the audio-capable model (or the classifier fallback): e.g. "speech, phone ring, keyboard, traffic".
+3. **Answer questions** with the text model, from the transcript + sound list.
+- Browser mic recording works too (WebM → WAV on the server).
 
-From the raw fields: `duration_us`, `proto`, `orig_pkts` (fp), `resp_pkts` (bp), `orig_bytes` (fb), `resp_bytes` (bb), plus TCP flags seen.
+### Text (documents)
+1. Accept PDF, TXT and Markdown. Split into ~500-word chunks with page numbers.
+2. Retrieve the most relevant chunks for the question (local embeddings from Ollama, or BM25 if embeddings are slow).
+3. Answer **only from those chunks**, quoting the page.
+4. **"Not in the document":** the prompt requires an exact `NOT_FOUND` reply when the chunks don't contain the answer, and the app shows "This isn't in the document." We test this explicitly: the practice pack has questions with no answer.
+
+### Code
+1. The coder model writes a Python function from the prompt.
+2. The app **runs it in a sandbox**: a separate process, 10-second timeout, temporary directory, no network, and only the uploaded file is readable.
+3. It shows the code, its output, and the result of any tests. If it fails, the error goes back to the model once for a fix.
+
+### Video
+1. Sample ~8 evenly spaced frames with OpenCV (more for longer clips, up to a cap), each labelled with its timestamp.
+2. Send them to the vision model in order, asking for a step-by-step description.
+3. Answer follow-up questions from the frames + that description. Counting and motion questions use more frames.
+
+### Logs: the Strayline detector (lite)
+
+Turns a day of connection logs into a short list of incidents, without labels. Input: CIC-IDS2017 CSV, or a Zeek `conn.log` if time allows.
+
+**Features (19 per connection + 7 per host-minute).** Only fields a flow record has; never IPs, ports or timestamps as model inputs.
 
 | Feature | Formula |
 |---|---|
 | Flow Duration | duration in µs |
-| Protocol | IP protocol number (6 TCP, 17 UDP, 1 ICMP) |
-| Total Fwd Packet / Total Bwd packets | fp / bp |
-| Total Length of Fwd / Bwd Packet | fb / bb |
-| Flow Bytes/s | (fb+bb) / duration_s, **0 if duration = 0** |
-| Flow Packets/s | (fp+bp) / duration_s, 0 if duration = 0 |
-| Fwd Packets/s, Bwd Packets/s | fp / duration_s, bp / duration_s (0 if duration = 0) |
+| Protocol | IP protocol number |
+| Fwd / Bwd packets, Fwd / Bwd bytes | fp, bp, fb, bb |
+| Flow Bytes/s, Flow Packets/s | (fb+bb)/s, (fp+bp)/s; **0 if duration = 0** |
+| Fwd / Bwd Packets/s | fp/s, bp/s (0 if duration = 0) |
 | Fwd / Bwd Packet Length Mean | fb/fp, bb/bp (0 if no packets) |
 | Average Packet Size | (fb+bb)/(fp+bp) |
-| Down/Up Ratio | bp / fp, a **plain ratio, not rounded down** (0 if fp = 0) |
-| FIN, SYN, RST, PSH, ACK flag | **presence bits 0/1**. From Zeek `history`: S=SYN, F=FIN, R=RST, A=ACK, D=data≈PSH, either case |
+| Down/Up Ratio | bp/fp, plain ratio (0 if fp = 0) |
+| FIN, SYN, RST, PSH, ACK | presence bits 0/1 |
 
-Leave out URG.
+Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1m`, `src_short_frac_1m` (share with ≤ 2 forward packets), `dst_flows_1m`, `dst_src_hosts_1m`, `dst_short_frac_1m`. **Compute these on the full data before any sampling.**
 
-### 4b. Per-host features (7), computed per clock minute
+**Never use:** TCP window sizes, segment size, header lengths, URG/CWR/ECE, per-host RST share (capture artifacts).
 
-| Feature | Definition |
+**Scaling:** signed log1p, then `(z − μ) / max(σ, 0.1)`, clipped to ±10, with μ and σ fit on benign training traffic.
+
+**Two detectors:**
+- **Classifier:** MLP d → 128 → 64 → 1 (ReLU, dropout 0.1), Adam 1e-3, batch 2048, 8 epochs, `pos_weight = n_benign / n_attack`, trained on labelled CIC-IDS2017 days other than the demo day.
+- **kNN anomaly score:** mean distance to the 5 nearest of 20,000 benign "normal" connections (flow features only). Catches what the classifier never saw.
+
+**Alerts:** alert if either score passes its threshold. Thresholds are set jointly on benign validation traffic so that 2% of normal connections alert in total (binary search over each arm's quantile).
+
+**Incidents:** group alerts per source host, split at gaps over 10 minutes, keep groups of ≥ 10 alerts. Rank by alert count; show the top 20.
+
+**In the chat:** each incident has a card (pseudonymized hosts, duration, rate, hosts and ports touched, which detector fired, top unusual features) and a chart (alerts over time, ports × hosts touched). The user can ask "what is this host doing?" and the vision model reads the card + chart.
+
+**Mistakes to avoid** (from earlier research): timestamps in µs divided as if ns (assert a day spans ~24 h); different feature code for training vs serving; per-host counts computed after sampling.
+
+---
+
+## 5. App
+
+- **FastAPI** server + one HTML/JS page, all assets local (no CDNs), so it works with no internet.
+- **One chat** with: text box, file upload (any of the five types or a log), mic button, and an "Incidents" tab for logs.
+- **Mobile:** the server listens on the local network; a phone on the same hotspot opens the same page (judging bonus for web + mobile). The layout works at phone width.
+- **Usability:** a progress message while a model runs ("transcribing… 6 s"), clear errors, and the evidence for every answer.
+
+---
+
+## 6. Testing ("your own test results")
+
+- **Practice pack** (not scored by the organizers): 25 image, 20 audio, 20 text, 20 code, 15 video items. Kaggle: `bhavyasreepylaa/ieee-ai-hackathon-2026-practice-pack` (needs a Kaggle login; download into `data/practice/`).
+- **Our security set:** phishing screenshots, voicemails we recorded ourselves, our own runbook document, screen recordings we made, and one CIC-IDS2017 day.
+- **Harness:** `python -m desk.eval` runs every item through the same code path as the app and writes `results/test_results.md`: per modality, accuracy (exact match, or our marking where answers are free-form), "not found" accuracy for text, unit-test pass rate for code, and seconds per item.
+- **Detector:** share of attack connections alerted and the false-alarm rate on the demo day's benign traffic.
+
+*(Results table goes here.)*
+
+---
+
+## 7. Limits (named, not hidden)
+
+*(Fill from test results.)* Expected:
+- Sound identification is the weakest input.
+- Counting and fast motion in video depend on frame sampling.
+- Long documents are limited by retrieval quality.
+- Generated code runs only in the sandbox; it's a helper, not an autonomous agent.
+- The detector is trained and tested on lab traffic (CIC-IDS2017), not a real campus network.
+
+---
+
+## 8. Setup
+
+### 1. Ollama and models
+**macOS** (no Homebrew needed):
+1. Download Ollama from https://ollama.com/download, unzip it, and drag `Ollama.app` into Applications.
+2. Open Ollama once (it serves on `localhost:11434`). Accept the offer to install the `ollama` command line tool.
+3. Pull the models:
+   ```bash
+   ollama pull qwen3-vl:8b
+   ```
+   ```bash
+   ollama pull qwen2.5-coder:7b
+   ```
+   ```bash
+   ollama pull gemma4
+   ```
+   If `ollama` isn't found, use `/Applications/Ollama.app/Contents/Resources/ollama`.
+4. Check: `ollama list` shows them.
+
+**Windows / Linux:** install from https://ollama.com/download, then the same `ollama pull` commands.
+
+### 2. Data (never committed; `data/` is git-ignored)
+- **CIC-IDS2017 (improved), 328 MB:**
+  ```bash
+  mkdir -p data/raw && curl -L -o data/raw/CICIDS2017_improved.zip https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip
+  ```
+  ```bash
+  cd data/raw && unzip CICIDS2017_improved.zip
+  ```
+  You should get `monday.csv` … `friday.csv`. Or copy them from Kyle.
+- **Practice pack:** download from Kaggle into `data/practice/`.
+
+### 3. Python
+Python 3.11+ in a virtual environment; `pip install -r requirements.txt` (added with the first code). Whisper's model downloads once on first run; run it once before going offline.
+
+### 4. Run *(to fill)*
+One command to start the app; one to run the test harness.
+
+---
+
+## 9. Rules we follow
+
+| Rule | How |
 |---|---|
-| src_flows_1m | connections from this source host in this minute |
-| src_dst_hosts_1m | distinct destination hosts it contacted |
-| src_dst_ports_1m | distinct destination ports it contacted |
-| src_short_frac_1m | share of its connections with ≤ 2 forward packets |
-| dst_flows_1m | connections *to* this destination host in this minute |
-| dst_src_hosts_1m | distinct sources contacting it |
-| dst_short_frac_1m | share of short connections to it |
-
-These make floods and scans obvious; in the original research, adding them took unseen DoS from 6% to 95%. **Excluded:** the per-host RST share, which is a capture artifact.
-
-### 4c. Never use these (testbed artifacts)
-
-TCP initial window bytes, minimum segment size, forward/backward header lengths, URG/CWR/ECE flags.
-
-### 4d. Scaling
-
-- Signed log1p: `z = sign(x) · log(1 + |x|)`.
-- Standardize `(z − μ) / max(σ, 0.1)`, clip to ±10. Fit μ, σ on **benign training traffic only**.
-- Refit μ/σ on the site's onboarding traffic, for the classifier's inputs too.
+| Open-weight models only, running locally | Ollama + Whisper on the laptop; no cloud AI anywhere; tested offline |
+| AI coding tools for writing code, not as the system's brain | We used AI assistants to help write code; the app's answers come only from the local models |
+| All code written during the event | This repo's history starts Nov 18, 2026. The detector design comes from Kyle's earlier Strayline research; no code, models or files were copied from it |
+| No hard-coded answers | Every answer in the demo is produced live; the harness runs the same code path |
+| Public repo in the IEEE GitHub organization, README with install and run steps | §8; we move this history to the org repo when it's assigned |
+| Licences | Datasets and models are credited below; no data or model weights in the repo |
 
 ---
 
-## 5. Models
+## 10. Credits
 
-Train on Apple MPS. Each model trains in seconds to a minute; budget a full retrain at under 10 minutes so you can rerun everything on Day 3 morning.
+- CIC-IDS2017, improved version: Engelen, Rimmer & Joosen, "Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case Study" (2021), and the Canadian Institute for Cybersecurity.
+- Models: Qwen3-VL and Qwen2.5-Coder (Alibaba Qwen), Gemma 4 (Google), Whisper (OpenAI), served by Ollama.
+- IEEE AI Hackathon 2026 practice pack (IEEE Student Branch, Roux Institute).
 
-### A. Lab attack classifier (supervised)
-
-- **MLP:** d → 128 → ReLU → Dropout 0.1 → 64 → ReLU → Dropout 0.1 → 1 logit.
-- Adam, lr 1e-3, batch 2048, 8 epochs, BCE-with-logits, `pos_weight = n_benign / n_attack`.
-- Up to 300k benign + up to 30k per attack family.
-- **Held-out-family mode:** a `--hold-out <family>` flag trains without that family. This powers the demo and the catchability map.
-
-### B. kNN distance (site anomaly arm 1)
-
-20,000 random benign onboarding connections, **flow features only**. Score = mean Euclidean distance to the k = 5 nearest. Batched `cdist` on MPS.
-
-### C. Autoencoder (site anomaly arm 2)
-
-d → 64 → 32 → 16 → 32 → 64 → d (ReLU), MSE, Adam lr 1e-3, batch 2048, 20 epochs, up to 300k onboarding connections, **flow + host features**. Score = mean squared reconstruction error.
-
-### Optional: Isolation Forest
-
-200 trees, 4096 samples per tree. It's the contamination-robust backup.
-
-### Onboarding (2017 setting)
-
-The "site's normal" is Monday plus the benign *train* split of the other days. The next 20% of benign sets the thresholds.
-
----
-
-## 6. Turning three scores into alerts
-
-### Joint OR with one shared budget
-
-```
-normalize w so Σw = 1          (equal weights 1:1:1)
-binary-search q in [0, B / max(w)] for ~40 iterations:
-    threshold_i = quantile(benign_val_scores_i, 1 − wᵢ·q)
-    union = fraction of benign_val rows where ANY score_i > threshold_i
-    if union < B: raise q else lower q
-```
-
-B = 2%. Equivalent to taking each arm's benign percentile rank and alerting when the max rank passes one cut-off.
-
-### Daily thresholds: stretch
-
-Recomputing the thresholds nightly from yesterday's scores (each source host capped at 200 connections/hour) matters for real deployment. It's out of scope unless there's time. Mention it in the pitch as the deployment story.
-
----
-
-## 7. Incidents and ranking
-
-### Incidents
-
-Sort alerts by time, group **per source host**, start a new incident after a **gap > 10 minutes**, keep incidents with **≥ 10 alerts**.
-
-**Incident card** (what the agents see):
-- id, pseudonymized src/dst, direction (int→int, ext→int, …)
-- first seen, duration, alert count, alerts per minute
-- protocols, distinct destination hosts and ports, top 5 ports
-- share fired by the classifier vs by the anomaly arms
-- median score percentiles
-- top unusual features: |median z| vs the site's normal, typical value here vs the normal value
-
-### Incident chart (the multimodal input)
-
-One PNG per ranked incident, about 768×512, rendered identically for every incident, with **no labels and no real IPs**:
-1. **Timeline:** alerts per minute over the incident's span, with the median for normal hosts drawn as a reference line.
-2. **Spread:** destination hosts × destination ports touched (a dot matrix; scans fill it, floods are one bright cell).
-3. **Score strip:** each arm's percentile per connection over time (classifier vs kNN vs autoencoder), which shows which arm "sees" it.
-
-Use a fixed layout, fixed axes where possible, and a clear title of `incident id · src pseudonym · direction` only.
-
-### Ranking: two queues, no AI
-
-1. **Volume queue:** the 50 incidents with the most alerts.
-2. **Low-and-slow queue (up to 25):** among the rest, incidents where the classifier fired on ≤ 20% of connections, **and** an anomaly arm fired on ≥ 80%, **and** the direction is external → internal, **and** the main destination port is in {21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 465, 587, 993, 995, 1433, 3306, 3389, 5432, 8080, 8443}. Rank by the anomaly arms' median percentile.
-
-**Don't rank by "the classifier and the anomaly arms agree".** It fails on botnet (classifier-only) and web attacks (kNN-only).
-
----
-
-## 8. Agents (local, multimodal)
-
-### Runtime
-
-- **Ollama** on the demo laptop (M4 Pro, 24 GB). Candidate models, picked by a Day 1 benchmark on Tuesday incidents:
-  - **Qwen2.5-VL 7B:** the faster choice.
-  - **Gemma 3 12B:** better quality if latency allows.
-- Structured output through Ollama's JSON-schema `format` parameter. Temperature 0, fixed seed, so runs are repeatable.
-- **One incident per triage call** (card + its chart), not batches of 20: small vision models degrade with many images per prompt. Keep the context block byte-identical across calls.
-- **Latency budget:** measure seconds per incident on Day 1. If 75 incidents take longer than ~4 minutes, the live demo triages the top 20 on stage, and the full 75-incident run is shown from a log made earlier that day, with its timestamps.
-
-### Ground rules
-
-- **Pseudonymize every host** (`int-host-12`, `ext-host-40`). The dataset's IPs are well known.
-- **No labels go to the agents.** Ground truth is joined afterwards, for scoring only.
-- **Log every call:** model, input tokens, output tokens, latency, decision.
-
-### Triage agent
-
-**Input:** the incident card (text) + the incident chart (image) + a fixed context block.
-
-**Structured output:**
-- `decision` ∈ {escalate, monitor, dismiss}
-- `priority` 1–5
-- `suspected_behavior` ∈ {dos_flood, ddos, port_scan, brute_force, botnet_c2, web_attack, infiltration_lateral, benign_anomaly, novel_unclear}
-- `visual_evidence`: one sentence on what the chart shows (for example "regular spikes every ~60 s", "fills the port axis")
-- `rationale` (two sentences citing evidence)
-- `confidence` 0–1
-
-**If the model returns invalid JSON or skips a field**, retry once. If it fails again, escalate the incident with "no decision".
-
-**Prompt rules that mattered in the original research:**
-- **Explain each card field and each chart panel.** Percentiles are relative to normal traffic; the reference line is a normal host's median.
-- **State the base rates.** Every incident is already unusual, so unusual alone is not evidence; expect 90%+ to be harmless.
-- **Escalate on a *coherent pattern*:** volume or rate, spread across hosts or ports, regular repetition (beaconing), classifier agreement across tens of flows, or a strong anomaly-only signal *at scale*.
-- **Keep escalations well under 15% of incidents.**
-- **Rejected variant:** "prefer suspicious when unsure" produced 38/40 false escalations. Don't use it.
-
-### Investigator agent (top 3–5 escalations)
-
-Small local models are unreliable at multi-step tool calling, so **pre-fetch the tool outputs deterministically** and put them in one prompt, with no tool calls:
-
-| Section | Contents |
-|---|---|
-| Incident | the card + the chart |
-| Flows | that host's 30 most anomalous flows in the window, alerted or not |
-| Host history | other incidents involving the host that day |
-| Feature profile | top unusual features |
-| Known families | the classifier's probability, plus the nearest family by centroid distance |
-| Catchability | the measured catchability map, so the agent knows where the detector is blind |
-
-**Report schema:** `summary`, `likely_attack_type` (including **`novel_unknown`** and **`benign_anomaly`**), `severity`, `confidence`, `evidence[]` (observed vs inferred kept separate), `blind_spot_warning`, `recommended_actions[]`, `open_questions[]`.
-
-Stretch: real tool calling, if the chosen model supports it reliably in Ollama.
-
----
-
-## 9. Evaluation protocols (do these honestly)
-
-1. **Leave-one-family-out catchability map:** for each family, train the classifier without it and measure the share caught at 2%. Use 3 seeds (10 if time allows), and report Wilson intervals. Infiltration (36 flows) is indicative only.
-2. **Live held-out replay:** Wednesday, DoS held out. Report the funnel and the measured false-alarm rate on the day's benign traffic.
-3. **Full-day funnel:** connections → alerts → incidents → sent to AI → escalated → top priority, for each test day.
-4. **Triage quality:** on Thu + Fri ranked incidents, report escalation precision, recall of attack incidents, and escalations per day.
-5. **Latency:** seconds per incident (triage), per investigation, and per full pipeline.
-6. **Multimodal ablation (the theme result):** the same incidents and the same model, (a) card only vs (b) card + chart. Report precision and recall for both, plus 2–3 concrete incidents where the chart changed the decision. **Fix this protocol before running it**, and run it on Thu/Fri, not on the dev day.
-7. **Fix selection rules before you look.** If you change a rule after seeing test results, say so.
-8. **Stretch: cross-network** (2017 → 2018) if the 2018 data is ready.
-
----
-
-## 10. Prior research results (reference only; not hackathon results)
-
-From the original Strayline research. Use these only as labelled context in the pitch ("previous work showed…"), never as this build's output.
-
-| | Lab classifier only | Original v1 |
-|---|---|---|
-| 2017 → 2018, 2% budget, 1% contamination | 20% | 87% |
-| 2018 → 2017 | 33% | 70% |
-
-Per family (2017 → 2018): DDoS 100, port scan 99, brute force 100, DoS 99, botnet 96, web 74, infiltration 40. A full 2018 day: 6.5M connections → ~1,250 incidents → 75 to triage → 19 escalations, top 3 all the real intrusion.
-
----
-
-## 11. Mistakes to avoid
-
-| Trap | Fix |
-|---|---|
-| Timestamp units (`/1e9` on µs squeezed a day into 1.7 h) | Convert via `(ts − epoch).total_seconds()`; assert a day spans ~24 h |
-| Feature formula drift | Compute features one way for training and serving |
-| Uneven sampling inflates host counts | Aggregate per host on the full data, then sample |
-| Capture artifacts (RST share, ECE/CWR, window size) | Drop them |
-| kNN learns attacks in onboarding as normal | Keep the classifier in the OR |
-| Agreement ranking | Volume + low-and-slow queues |
-| Reused output folders | Wipe the run folder at the start of every run |
-| Over-eager prompt | Base rates and pattern rules |
-| **Hackathon:** copying from the old repo | Never open old source files while coding; build from this spec only |
-| **Hackathon:** a cloud API left in a code path | No cloud SDKs in requirements; test the demo with Wi-Fi off |
-| **Hackathon:** a static demo | Every on-screen number comes from a run triggered in the app |
-| **Hackathon:** quoting old numbers as new | Prior results only in a labelled "prior work" slide |
-| **Hackathon:** slow local LLM on stage | Benchmark on Day 1; live triage on the top 20 if needed |
-| **Hackathon:** scope creep | Finish the core in the plan file before any stretch goal |
-
----
-
-## 12. Stack
-
-- Python 3.11+, pandas/pyarrow, PyTorch (MPS), scikit-learn
-- matplotlib for incident charts (headless, Agg backend)
-- Ollama + Qwen2.5-VL 7B or Gemma 3 12B (local, offline)
-- Demo app: FastAPI (or Flask) serving a static HTML/JS page. Endpoints: start a run, stream progress, list incidents, get an incident with its chart and agent output, get the catchability map. Upload a CSV or `conn.log`.
-- **No cloud AI SDKs** in `requirements.txt`.
-
----
-
-*Strayline, by Kyle Robin (Bates College '29). The design, numbers and lessons come from the original research (github.com/krobin2005/strayline); the hackathon code is written fresh at the event.*
+*Team: Kyle Robin, Liam Baron, Zac Bower (Bates College).*
