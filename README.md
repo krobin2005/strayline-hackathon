@@ -60,15 +60,19 @@ Design rules:
 
 ## 3. Models and why
 
-All open-weight, all run through Ollama except Whisper. Final picks are confirmed by the practice-pack benchmark (§6).
+All open-weight and served by Ollama. **Two models cover all five inputs**, so only two ever need to be in memory (24 GB). Final picks are confirmed by the practice-pack benchmark (§6).
 
 | Job | Model | Why | Backup |
 |---|---|---|---|
-| Images, video frames, incident charts | **Qwen3-VL 8B** (`qwen3-vl:8b`) | Recommended by organizers; strong OCR, counting and chart reading | `qwen2.5vl:7b` |
-| Document QA, audio follow-ups, general text | **Qwen3-VL 8B** | Same model as images, so fewer swaps | `gemma3:12b` |
-| Code | **Qwen2.5-Coder 7B** (`qwen2.5-coder:7b`) | Recommended; fast; strong at Python | `qwen3-coder` |
-| Speech to text | **Whisper** (`faster-whisper`, `small` model) | Recommended; accurate; runs on CPU | `medium` if accuracy is low |
-| Identifying sounds | **Gemma 4** (`gemma4`), if Ollama accepts audio input for it | Recommended for audio | A small local audio classifier (YAMNet or CLAP), or a named limit |
+| Images, video frames, incident charts | **Qwen3-VL 8B** (`qwen3-vl:8b`) | Recommended by organizers. First test: counted 6 markers and read button text exactly; 2.3 s warm, 22 s cold | `qwen2.5vl:7b` |
+| Code | **Gemma 4 E4B** (`gemma4:e4b-it-q4_K_M`) | First test (per-minute port-scan finder, run against unit tests): **passed 2/2** in ~14 s | none tested yet |
+| Speech to text, audio questions | **Gemma 4 E4B** | Takes audio directly (WAV through Ollama's `images` field). First test: perfect transcript of a fake help-desk voicemail, 7 s | Whisper (`faster-whisper`, `small`) |
+| Identifying sounds | **Gemma 4 E4B** | Works only with a "this is a sound, not speech" prompt and clips stretched past ~3 s by looping. First test: macOS chimes → "musical chime", "ringing bell". **Still to test on real sounds** | YAMNet/CLAP classifier, or a named limit |
+| Document QA, general text | **Gemma 4 E4B** (to confirm) | Avoids the Qwen3-VL text-only problem below | `gemma3:12b` |
+
+**Rejected on first test:**
+- **Qwen2.5-Coder 7B** (organizers' code pick): failed the port-scan task 2/2. Its fix after seeing the failing test was worse.
+- **Qwen3-VL 8B for text-only prompts:** returned an empty answer after ~100 s on the code task, apparently spending the whole reply on hidden reasoning even with `think: false`. Fine on image prompts.
 
 **Hardware:** MacBook Pro, Apple M4 Pro, 24 GB RAM, Ollama 0.40.16. *(Seconds per item from §6 go here.)*
 
@@ -182,10 +186,7 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
    ollama pull qwen3-vl:8b
    ```
    ```bash
-   ollama pull qwen2.5-coder:7b
-   ```
-   ```bash
-   ollama pull gemma4
+   ollama pull gemma4:e4b-it-q4_K_M
    ```
    If `ollama` isn't found, use `/Applications/Ollama.app/Contents/Resources/ollama`.
 4. Check: `ollama list` shows them.
