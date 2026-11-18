@@ -60,19 +60,29 @@ P3 may build the UI against a **hand-made sample** of these files on Day 1. **De
 
 ---
 
-## 4. Before writing code (Day 1, by 2:30 pm)
+## 4. Before writing code (status as of Wed Nov 18, ~2 pm)
 
-- [ ] **Email the organizers** (ieeestudentbranchportland@gmail.com): disclose the prior research and that we're rebuilding from a design document; ask whether a local open-weights LLM is allowed during the demo.
-- [ ] Get the team's assigned GitHub repo and add all members.
-- [ ] Ask at the **2:30 pm Q&A**:
-  1. Is a local LLM (Ollama, offline) allowed as part of the demo?
-  2. What's the exact submission deadline on Day 3, and how long do presentations run?
-  3. What do the "testing rounds" involve? Will judges bring inputs?
-  4. Can we use public datasets downloaded before the event? (Data, not code.)
-- [ ] **Install Ollama** and pull both candidate models (`qwen2.5vl:7b`, `gemma3:12b`); this takes a while, so start it right after kickoff.
-- [ ] Check the CIC-IDS2017 CSVs are on every laptop that will run code (P1's copy: 2.1M rows across 5 days).
+We missed the kickoff session (1–4 pm on Teams) because of class, so we're catching up by email.
+
+**Done**
+- [x] Prior-work disclosure and local-LLM question sent to Shubham Gajjar (organizer) on Nov 16. No reply yet.
+- [x] Local-LLM question sent to ieeestudentbranchportland@gmail.com on Nov 18.
+- [x] Team repo created: `krobin2005/strayline-hackathon` (private), with README (spec) and PLAN. Liam (LiamBaron5) and Zac (Zac5858) invited with write access.
+- [x] CIC-IDS2017 CSVs on Kyle's laptop (2.1M rows across 5 days).
+
+**To do now**
+- [ ] **Find out what we missed at kickoff.** Check the Teams meeting chat, or ask Vedanshi Shah (shah.vedans@northeastern.edu) by replying to the "Hackathon Day 1" thread. We need:
+  1. The **problem statement** and **judging criteria**. Re-weight §2 the moment we have them.
+  2. Whether there's an **official team repo**. If so, push our history to it (`git remote add official <url> && git push official main`).
+  3. The **submission deadline** on Day 3 and the **presentation length**.
+  4. What the **testing rounds** involve: will judges bring their own inputs?
+- [ ] Liam and Zac: accept the GitHub invites.
+- [ ] **Install Ollama** and pull both candidate models (`qwen2.5vl:7b`, `gemma3:12b`). It's a big download, so start it first.
+- [ ] Copy the CIC-IDS2017 CSVs to every laptop that will run code (they stay out of git).
 - [ ] Optional: start the CSE-CIC-IDS2018 download (10 GB) in the background for the stretch goal.
-- [ ] Confirm the old `strayline` repo stays closed while coding. Only the spec is open.
+- [ ] Keep the old `strayline` repo closed while coding. Only the spec is open.
+
+**If the organizers say no to local LLMs:** the Gate 2 ML-only demo becomes the submission (see §7).
 
 ---
 
