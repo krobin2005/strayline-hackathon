@@ -84,10 +84,28 @@ Router (plain code, by file type, not an LLM)
    └─ conn logs/CSV  → Strayline detector → incidents + charts → chat about any incident
 ```
 
-### Models: confirm by benchmark on Wednesday evening
+### Models (decided by first tests; README §3 has the evidence)
 
-| Job | First choice | Backup | Why |
-|---|---|---|---|
+| Job | Model |
+|---|---|
+| Images, video frames | **Qwen3-VL 8B** (`qwen3-vl:8b`) |
+| Audio (speech + sounds), code, documents, general text, log briefings | **Gemma 4 E4B** (`gemma4:e4b-it-q4_K_M`) |
+| Rejected | Qwen2.5-Coder 7B (failed code tests); Qwen3-VL for text-only prompts (empty answers) |
+
+**Hardware for the slides:** MacBook Pro, Apple M4 Pro, 24 GB, Ollama 0.40.16, fully offline after setup.
+
+### Status (Wed Nov 18, ~5 pm)
+- [x] App: one chat page, laptop + phone, all five inputs plus logs, every answer shows its evidence and time
+- [x] Code sandbox (no network, temp folder, 10 s) and one repair round
+- [x] Practice-pack harness (`python -m desk.eval`), checked on a synthetic stand-in pack (10/11)
+- [x] Strayline detector (lite) on Wednesday: 0.44% false alarms, DoS flood is incident #1
+- [x] `setup.sh` for teammates' laptops; `tests/smoke_api.py` checks every input in ~2 min
+- [ ] **Download the practice pack** (Kaggle login needed) and run the harness for real numbers
+- [ ] Test real sound recordings (pure tones fail); tune the log-briefing prompt (it over-flags normal incidents)
+- [ ] Try the app from a phone; demo inputs (phishing screenshots, runbook, voicemails, screen recordings)
+- [ ] User feedback session, slides, rehearsal; move history to the IEEE org repo before Thu EOD
+
+---|---|---|---|
 | Image, video frames, charts | **Qwen3-VL 8B** (organizers' pick) | qwen2.5vl:7b (already installed) | Strong OCR and counting |
 | Text answers, document QA | Qwen3-VL 8B (one model for both) | gemma3:12b (installed) | Fewer model swaps on 24 GB |
 | Code | **qwen2.5-coder:7b** | qwen3-coder | Organizers' pick; fast |
