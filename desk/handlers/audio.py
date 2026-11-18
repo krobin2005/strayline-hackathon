@@ -7,6 +7,7 @@ Gemma 4 takes WAV through Ollama's `images` field. Two things from our tests (RE
 """
 
 import io
+import re
 import shutil
 import subprocess
 import tempfile
@@ -26,10 +27,20 @@ TRANSCRIBE_PROMPT = (
     f"If there is no speech at all, output exactly {NO_SPEECH}."
 )
 SOUNDS_PROMPT = (
-    "Listen to this audio clip. Ignore the meaning of any words. List the distinct sounds you hear "
-    "(for example: a man speaking, a dog barking, a phone ringing, typing, traffic, music, an alarm), "
-    "most prominent first, as a short comma-separated list. Give your best guess for each sound."
+    "Listen to this audio clip and identify the sounds in it. Ignore the meaning of any words. "
+    "Common kinds of sound include: animals (dog, cat, rooster, birds), weather and water (rain, "
+    "waves, wind, thunder), fire crackling, people (talking, a baby crying, laughing, coughing, "
+    "sneezing, footsteps), machines and vehicles (engine, helicopter, chainsaw, car horn, siren), "
+    "household (clock ticking, door knock, phone ringing, typing, water running), electronic beeps or "
+    "tones, and music. Answer with a short comma-separated list, most prominent first. "
+    "Only include people talking if you actually hear a human voice."
 )
+SHORT_SOUNDS_PROMPT = (
+    "Listen to this audio clip. It contains a sound, not speech. Identify the sound: what object, animal, "
+    "instrument, alarm or event most likely made it? Give your best guess in under 10 words."
+)
+_DIDNT_HEAR = re.compile(r"no audio|not provided|cannot hear|can't hear|unable to (hear|listen)|provide the audio", re.I)
+
 ANSWER_SYSTEM = (
     "You are Strayline Desk, an assistant for a college IT security team. Answer the question about "
     "the audio clip using the clip itself, its transcript and the list of sounds. If the audio does "
@@ -107,17 +118,28 @@ def transcribe(wav_bytes: bytes) -> tuple[str, float]:
     return " ".join(parts), total
 
 
-def identify_sounds(wav_bytes: bytes) -> tuple[str, float]:
+def identify_sounds(wav_bytes: bytes, has_speech: bool) -> tuple[str, float]:
     # Listen to the first piece only; it's enough to name the sounds and keeps this fast.
     first = pieces(wav_bytes)[0]
-    return llm.chat(llm.GENERAL_MODEL, SOUNDS_PROMPT, media=[looped(first)], max_tokens=600)
+    prompt = SOUNDS_PROMPT + ("" if has_speech else " A speech check found no words in this clip.")
+    text, seconds = llm.chat(llm.GENERAL_MODEL, prompt, media=[looped(first)], max_tokens=600)
+    if _DIDNT_HEAR.search(text):
+        # Simple tones sometimes make the model claim there's no audio; a shorter prompt usually works.
+        text, more = llm.chat(llm.GENERAL_MODEL, SHORT_SOUNDS_PROMPT, media=[looped(first, 4.0)], max_tokens=600)
+        seconds += more
+        if _DIDNT_HEAR.search(text):
+            text = "(couldn't identify the sounds)"
+    return text, seconds
 
 
 def answer(data: bytes, filename: str, question: str) -> Answer:
     wav_bytes = to_wav(data, filename)
     length = duration(wav_bytes)
     transcript, t1 = transcribe(wav_bytes)
-    sounds, t2 = identify_sounds(wav_bytes)
+    try:
+        sounds, t2 = identify_sounds(wav_bytes, bool(transcript))
+    except llm.ModelError:
+        sounds, t2 = "(couldn't identify the sounds)", 0.0
     evidence = [
         f"Transcript: {transcript or '(no speech)'}",
         f"Sounds: {sounds}",
@@ -129,9 +151,9 @@ def answer(data: bytes, filename: str, question: str) -> Answer:
         text = (f"Transcript: {transcript}" if transcript else "No speech in this clip.") + f"\n\nSounds: {sounds}"
         return Answer(text=text, kind=AUDIO, model=llm.GENERAL_MODEL, seconds=t1 + t2, evidence=evidence)
 
-    prompt = (f"Transcript: {transcript or '(no speech)'}\nSounds heard: {sounds}\n\n"
+    prompt = (f"Transcript: {transcript or '(no speech: this clip has no spoken words)'}\nSounds heard: {sounds}\n\n"
               f"Question: {question}")
     # Short clips go along with the question so the model can also listen for itself.
-    media = [wav_bytes] if length <= PIECE_SECONDS else None
+    media = [wav_bytes] if transcript and length <= PIECE_SECONDS else None
     text, t3 = llm.chat(llm.GENERAL_MODEL, prompt, system=ANSWER_SYSTEM, media=media)
     return Answer(text=text, kind=AUDIO, model=llm.GENERAL_MODEL, seconds=t1 + t2 + t3, evidence=evidence)

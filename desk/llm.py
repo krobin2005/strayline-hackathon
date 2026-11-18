@@ -55,27 +55,48 @@ def chat(model: str, prompt: str, *, system: str | None = None, media: list[byte
     if model.startswith("qwen3"):
         payload["think"] = False
 
+    start = time.monotonic()
+    message = _post(payload, timeout)
+    answer = message.get("content", "").strip()
+    if not answer and message.get("thinking"):
+        # Gemma 4 reasons privately first. If that used the whole budget, try once more with double the room.
+        payload["options"]["num_predict"] = max_tokens * 2
+        message = _post(payload, timeout)
+        answer = message.get("content", "").strip()
+    if not answer:
+        why = " It ran out of room while reasoning." if message.get("thinking") else ""
+        raise ModelError(f"{model} returned an empty answer.{why} Try again or ask a shorter question.")
+    return answer, time.monotonic() - start
+
+
+def _post(payload: dict, timeout: float) -> dict:
     request = urllib.request.Request(
         f"{OLLAMA_URL}/api/chat",
         data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"},
     )
-    start = time.monotonic()
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = json.load(response)
+            return json.load(response).get("message") or {}
     except urllib.error.HTTPError as e:
-        raise ModelError(f"{model}: {e.code} {e.read().decode(errors='replace')[:300]}") from e
+        raise ModelError(f"{payload['model']}: {e.code} {e.read().decode(errors='replace')[:300]}") from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise ModelError(f"Can't reach Ollama at {OLLAMA_URL}. Is the Ollama app running? ({e})") from e
 
-    message = body.get("message") or {}
-    answer = message.get("content", "").strip()
-    if not answer:
-        # Gemma 4 reasons privately first; if it uses the whole token budget doing that, the answer is empty.
-        why = " It ran out of room while reasoning." if message.get("thinking") else ""
-        raise ModelError(f"{model} returned an empty answer.{why} Try again or ask a shorter question.")
-    return answer, time.monotonic() - start
+
+def warm_up(models: list[str] | None = None) -> None:
+    """Load models into memory ahead of time so the first real question isn't slow (~20-50 s cold)."""
+    for model in models or [VISION_MODEL, GENERAL_MODEL]:
+        request = urllib.request.Request(
+            f"{OLLAMA_URL}/api/generate",
+            data=json.dumps({"model": model, "keep_alive": KEEP_ALIVE}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=300):
+                pass
+        except (urllib.error.URLError, TimeoutError):
+            pass  # Ollama not running yet; the page's status dot shows that.
 
 
 def server_ok() -> bool:

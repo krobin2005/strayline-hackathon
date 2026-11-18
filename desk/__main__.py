@@ -2,8 +2,11 @@
 
 import os
 import socket
+import threading
 
 import uvicorn
+
+from desk import llm
 
 
 def _lan_address() -> str | None:
@@ -22,5 +25,6 @@ if __name__ == "__main__":
     print(f"\nStrayline Desk\n  on this laptop:  http://localhost:{port}")
     if lan:
         print(f"  on your phone:   http://{lan}:{port}  (same Wi-Fi or hotspot)")
-    print()
+    print("  loading both models in the background so the first question is fast…\n")
+    threading.Thread(target=llm.warm_up, daemon=True).start()
     uvicorn.run("desk.server:app", host="0.0.0.0", port=port)

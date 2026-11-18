@@ -234,7 +234,7 @@ form.addEventListener("submit", async (event) => {
   input.value = "";
   autosize();
   sendButton.disabled = true;
-  const looksLikeCode = /\b(write|create|generate|implement|build|make)\b.{0,60}\b(function|script|program|code|class|regex|parser|query|snippet|method)\b|\bin python\b/i;
+  const looksLikeCode = /\b(write|create|generate|implement|build|make)\b.{0,60}\b(function|script|program|code|class|regex|parser|query|snippet|method)\b|\bin python\b|^\s*(def |from \w+ import |import \w+)/im;
   const pendingKind = attachment ? attachment.kind : (looksLikeCode.test(question) ? "code" : null);
   const pending = addPending(pendingKind);
   try {

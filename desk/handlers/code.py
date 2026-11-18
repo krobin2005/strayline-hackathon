@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from .. import llm
@@ -25,6 +26,8 @@ _CODE_REQUEST = re.compile(
     r"regex|regular expression|parser|query|snippet|method)\b|\bin python\b|\bpython (function|script|code)\b",
     re.IGNORECASE | re.DOTALL,
 )
+# A pasted function stub ("def f(x):" plus a docstring), the format of the challenge's code items.
+_CODE_STUB = re.compile(r"^\s*(def |from \w+ import |import \w+)", re.MULTILINE)
 
 SYSTEM = (
     "You write correct, simple Python 3 code. Reply with exactly one ```python code block and nothing "
@@ -41,7 +44,8 @@ _SANDBOX_PROFILE = "(version 1)(allow default)(deny network*)"
 
 
 def is_code_request(question: str) -> bool:
-    return bool(_CODE_REQUEST.search(question or ""))
+    question = question or ""
+    return bool(_CODE_REQUEST.search(question) or _CODE_STUB.search(question))
 
 
 def _extract_code(reply: str) -> str:
@@ -71,8 +75,21 @@ def run_sandboxed(code: str, files: dict[str, bytes] | None = None) -> tuple[boo
         return result.returncode == 0, output[-4000:]
 
 
-def answer(question: str, file_name: str | None = None, file_data: bytes | None = None) -> Answer:
+@dataclass
+class CodeResult:
+    code: str
+    passed: bool  # ran without error and its own self-test passed
+    output: str
+    attempts: int
+    seconds: float
+
+
+def write_and_test(question: str, file_name: str | None = None, file_data: bytes | None = None) -> CodeResult:
+    """Write code for the request, run it in the sandbox, and fix it once if it fails."""
     prompt = question.strip()
+    if _CODE_STUB.search(prompt):
+        prompt = ("Complete this Python code. Keep every function name and signature exactly as given, "
+                  "and follow the docstring and its examples precisely.\n\n" + prompt)
     files = None
     if file_name and file_data is not None:
         files = {file_name: file_data}
@@ -97,12 +114,16 @@ def answer(question: str, file_name: str | None = None, file_data: bytes | None 
         ok, output = run_sandboxed(code, files)
         passed = ok and PASS_MARKER in output
         attempts = 2
+    return CodeResult(code=code, passed=passed, output=output, attempts=attempts, seconds=seconds)
 
-    status = "✅ Ran and passed its tests" if passed else "⚠️ The code ran into a problem"
-    if attempts == 2:
+
+def answer(question: str, file_name: str | None = None, file_data: bytes | None = None) -> Answer:
+    r = write_and_test(question, file_name, file_data)
+    status = "✅ Ran and passed its tests" if r.passed else "⚠️ The code ran into a problem"
+    if r.attempts == 2:
         status += " (after one fix)"
     # Output goes in its own block so the page shows it exactly (e.g. masked "****" isn't read as bold).
-    text = f"```python\n{code}\n```\n\n{status}. Output:\n\n```text\n{output or '(no output)'}\n```"
+    text = f"```python\n{r.code}\n```\n\n{status}. Output:\n\n```text\n{r.output or '(no output)'}\n```"
     evidence = [f"Run in a sandbox: no network, temporary folder, {TIMEOUT_SECONDS}-second limit. "
-                f"Attempts: {attempts}."]
-    return Answer(text=text, kind=KIND, model=llm.GENERAL_MODEL, seconds=seconds, evidence=evidence)
+                f"Attempts: {r.attempts}."]
+    return Answer(text=text, kind=KIND, model=llm.GENERAL_MODEL, seconds=r.seconds, evidence=evidence)
