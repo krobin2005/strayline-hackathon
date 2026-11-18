@@ -13,8 +13,7 @@ MIN_FRAMES = 8
 MAX_FRAMES = 16
 SECONDS_PER_FRAME = 2.0  # longer clips get more frames, up to MAX_FRAMES
 MAX_SIDE = 512
-# Each 512-px frame costs roughly 400-1,100 tokens in Qwen3-VL; 16 frames need about this much room.
-CONTEXT_TOKENS = 20480
+# Each 512-px frame costs roughly 400-1,100 tokens in Qwen3-VL; llm.CONTEXT gives the vision model room for 16.
 
 SYSTEM = (
     "You are Strayline Desk, an assistant for a college IT security team. You are given frames "
@@ -77,7 +76,7 @@ def answer(data: bytes, filename: str, question: str) -> Answer:
     labels = ", ".join(f"frame {i + 1} at {t:.1f} s" for i, t in enumerate(times))
     prompt = (f"These are {len(frames)} frames from a {length:.1f}-second video, in order: {labels}.\n\n"
               f"{question.strip() or DEFAULT_QUESTION}")
-    text, seconds = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=frames, context=CONTEXT_TOKENS)
+    text, seconds = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=frames)
     evidence = [f"{len(frames)} frames sampled from a {length:.1f} s clip at: "
                 + ", ".join(f"{t:.1f} s" for t in times)]
     return Answer(text=text, kind=VIDEO, model=llm.VISION_MODEL, seconds=seconds, evidence=evidence)

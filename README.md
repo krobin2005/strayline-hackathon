@@ -169,7 +169,7 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 
 *(Update from the practice-pack results.)* So far:
 - Sound identification is the weakest input. Pure synthetic tones often can't be identified (the model may say it heard nothing); real recordings are still to be tested on the practice pack.
-- The first video question after a model switch takes ~50 s while Qwen3-VL loads with a large context; the app pre-loads both models at start, and later questions take ~6 s.
+- A cold video question takes ~50 s while Qwen3-VL loads with its 20k-token context. The app pre-loads both models at start (Gemma first, then Qwen3-VL; the other order evicted Qwen3-VL), after which a video question takes ~5 s. Start the app a minute before the demo.
 - On a phone, the mic button is hidden: browsers only allow the mic on secure pages, and the laptop's local address is plain http. Phones can upload a voice memo instead.
 - Counting and fast motion in video depend on frame sampling.
 - Long documents are limited by retrieval quality.

@@ -15,6 +15,9 @@ GENERAL_MODEL = os.environ.get("DESK_GENERAL_MODEL", "gemma4:e4b-it-q4_K_M")
 
 # Keep models loaded between questions so follow-ups are fast.
 KEEP_ALIVE = "30m"
+# Ollama reloads a model whenever the context size changes, so each model always uses one size.
+# The vision model needs room for up to 16 video frames.
+CONTEXT = {VISION_MODEL: 20480, GENERAL_MODEL: 8192}
 
 
 class ModelError(RuntimeError):
@@ -48,9 +51,7 @@ def chat(model: str, prompt: str, *, system: str | None = None, media: list[byte
         # The cap stops a model that starts repeating itself from running for minutes.
         "options": {"temperature": temperature, "num_predict": max_tokens},
     }
-    # Ollama's default context (4096 tokens) is too small for several video frames.
-    if context:
-        payload["options"]["num_ctx"] = context
+    payload["options"]["num_ctx"] = context or CONTEXT.get(model, 8192)
     # Qwen3 models reason silently by default, which is slow and can leave the answer empty.
     if model.startswith("qwen3"):
         payload["think"] = False
@@ -86,10 +87,12 @@ def _post(payload: dict, timeout: float) -> dict:
 
 def warm_up(models: list[str] | None = None) -> None:
     """Load models into memory ahead of time so the first real question isn't slow (~20-50 s cold)."""
-    for model in models or [VISION_MODEL, GENERAL_MODEL]:
+    # Order matters: loading Gemma after Qwen3-VL evicted Qwen3-VL in our tests; this order keeps both.
+    for model in models or [GENERAL_MODEL, VISION_MODEL]:
         request = urllib.request.Request(
             f"{OLLAMA_URL}/api/generate",
-            data=json.dumps({"model": model, "keep_alive": KEEP_ALIVE}).encode(),
+            data=json.dumps({"model": model, "keep_alive": KEEP_ALIVE,
+                             "options": {"num_ctx": CONTEXT.get(model, 8192)}}).encode(),
             headers={"Content-Type": "application/json"},
         )
         try:
