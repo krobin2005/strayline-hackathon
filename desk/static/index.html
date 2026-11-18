@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Strayline Desk</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>Strayline Desk</h1>
+        <p class="sub">Offline security assistant · nothing leaves this laptop</p>
+      </div>
+    </div>
+    <span id="status" class="status" title="Local model server">checking…</span>
+  </header>
+
+  <main id="log" class="log" aria-live="polite">
+    <section class="welcome" id="welcome">
+      <h2>Drop in anything you're looking at.</h2>
+      <p>Ask a question, or attach a file and ask about it.</p>
+      <ul class="kinds">
+        <li><b>Image</b> phishing screenshots, photos, charts</li>
+        <li><b>Document</b> runbooks and policies (PDF, TXT, MD)</li>
+        <li><b>Audio</b> voicemails and recordings <i>soon</i></li>
+        <li><b>Video</b> screen recordings <i>soon</i></li>
+        <li><b>Code</b> "write a function that…" <i>soon</i></li>
+        <li><b>Logs</b> a day of connection logs <i>soon</i></li>
+      </ul>
+    </section>
+  </main>
+
+  <form id="composer" class="composer" autocomplete="off">
+    <div id="chip" class="chip" hidden>
+      <span id="chip-kind" class="chip-kind"></span>
+      <span id="chip-name" class="chip-name"></span>
+      <button type="button" id="chip-clear" class="chip-clear" aria-label="Remove attachment">×</button>
+    </div>
+    <div class="row">
+      <label class="attach" title="Attach a file">
+        <input id="file" type="file" hidden
+               accept="image/*,audio/*,video/*,.pdf,.txt,.md,.csv,.log">
+        <span aria-hidden="true">＋</span><span class="sr">Attach a file</span>
+      </label>
+      <textarea id="question" rows="1" placeholder="Ask a question…"></textarea>
+      <button id="send" class="send" type="submit">Ask</button>
+    </div>
+  </form>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

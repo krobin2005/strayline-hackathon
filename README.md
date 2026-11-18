@@ -205,10 +205,19 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 - **Practice pack:** download from Kaggle into `data/practice/`.
 
 ### 3. Python
-Python 3.11+ in a virtual environment; `pip install -r requirements.txt` (added with the first code). Whisper's model downloads once on first run; run it once before going offline.
+Python 3.11+ (tested on 3.14):
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+``` Whisper's model downloads once on first run; run it once before going offline.
 
-### 4. Run *(to fill)*
-One command to start the app; one to run the test harness.
+### 4. Run
+With Ollama open:
+```bash
+.venv/bin/python -m desk
+```
+It prints two addresses: `http://localhost:8000` for this laptop, and a `http://<laptop-ip>:8000` address for a phone on the same Wi-Fi or hotspot. The status dot turns green when the local models are reachable.
+
+Working so far: image questions, document questions (with "This isn't in the document."), and plain questions. Audio, video, code and logs come next.
 
 ---
 

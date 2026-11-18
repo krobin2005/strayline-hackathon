@@ -1,0 +1,5 @@
+# Strayline Desk: local only. No cloud AI SDKs, by design.
+fastapi==0.165.0
+uvicorn==0.54.0
+python-multipart==0.0.34
+pypdf==7.1.1
