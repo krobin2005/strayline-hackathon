@@ -6,7 +6,9 @@ This is the build spec for rebuilding Strayline from scratch at the **IEEE AI Ha
 
 ## How we work
 
-We design, build, test, and rehearse together on one laptop at a time. Everyone shares responsibility for each task, whoever is at the keyboard. We use the work listed under P1, P2, and P3 in [PLAN.md](PLAN.md) as a shared checklist. The schedule and demo script are there too.
+We design, build, test, and rehearse together on one laptop at a time. Everyone shares responsibility for each task, whoever is at the keyboard. We use the work listed under P1, P2, and P3 in [PLAN.md](PLAN.md) as a shared checklist. The schedule and demo script are 
+there too.
+
 ---
 
 ## Set up the shared laptop
