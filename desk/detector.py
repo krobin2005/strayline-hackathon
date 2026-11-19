@@ -231,6 +231,9 @@ def load_detector() -> Detector | None:
 
 # ---------- incidents ----------
 
+_LAN = [ipaddress.ip_network(n) for n in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]
+
+
 class Pseudonyms:
     """int-host-N / ext-host-N names, so neither the LLM nor the screen shows real addresses."""
 
@@ -240,7 +243,9 @@ class Pseudonyms:
     def __call__(self, ip: str) -> str:
         if ip not in self.names:
             try:
-                internal = ipaddress.ip_address(ip).is_private
+                address = ipaddress.ip_address(ip)
+                # LAN ranges only: Python's is_private also covers documentation ranges such as 203.0.113.0/24.
+                internal = any(address in net for net in _LAN if net.version == address.version)
             except ValueError:
                 internal = False
             prefix = "int-host" if internal else "ext-host"
@@ -280,13 +285,15 @@ def analyse(path: Path, det: Detector, top: int = 20) -> Report:
             unusual = np.argsort(-np.abs(np.median(z, 0)))[:3]
             card = {
                 "source": names(src_ip),
-                "targets": sorted({names(d) for d in inc["dst"].unique()[:5]}),
+                "example_targets": sorted({names(d) for d in inc["dst"].unique()[:5]}),  # up to 5; see distinct_targets
                 "start": pd.to_datetime(inc["ts"].min(), unit="s").strftime("%H:%M"),
                 "minutes": round(minutes, 1),
                 "alerts": int(len(inc)),
                 "alerts_per_min": round(len(inc) / minutes, 1),
                 "distinct_targets": int(inc["dst"].nunique()),
                 "distinct_ports": int(inc["dst_port"].nunique()),
+                "mb_sent": round(float(inc["fwd_bytes"].sum()) / 1e6, 1),
+                "mb_received": round(float(inc["bwd_bytes"].sum()) / 1e6, 1),
                 "top_ports": [int(p) for p in inc["dst_port"].value_counts().index[:5]],
                 "classifier_flags": int(inc["by_clf"].sum()),
                 "anomaly_flags": int(inc["by_knn"].sum()),
