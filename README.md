@@ -251,7 +251,7 @@ cd data/raw && unzip CICIDS2017_improved.zip
 | AI coding tools for writing code, not as the system's brain | We used AI assistants to help write code; the app's answers come only from the local models |
 | All code written during the event | This repo's history starts Nov 18, 2026. The detector design comes from Kyle's earlier Strayline research; no code, models or files were copied from it |
 | No hard-coded answers | Every answer in the demo is produced live; the harness runs the same code path |
-| Public repo in the IEEE GitHub organization, README with install and run steps | §8; we move this history to the org repo when it's assigned |
+| Public team repo submitted to the organizers, README with install and run steps | §8; this repo, public and submitted through the organizers' form on Nov 19 |
 | Licences | Datasets and models are credited below; no data or model weights in the repo |
 
 ---
