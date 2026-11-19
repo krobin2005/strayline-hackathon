@@ -260,8 +260,10 @@ if (navigator.mediaDevices && window.MediaRecorder && window.isSecureContext) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (uploading || answering) return;
   const question = input.value.trim();
   if (!question && !attachment) { input.focus(); return; }
+  answering = true;
   addUserMessage(question, attachment);
   input.value = "";
   autosize();

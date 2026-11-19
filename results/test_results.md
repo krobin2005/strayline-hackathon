@@ -3,13 +3,13 @@
 Run 2026-11-18 20:54 on arm64 (macOS-26.3.1), models `qwen3-vl:8b` and `gemma4:e4b-it-q4_K_M` through Ollama, Wi-Fi not required.
 Pack: `practice_pack` (100 items). Per-item answers stay local in `data/eval/` (pack rules).
 
-| Input | Items | Correct | Needs review | Wrong / error | Accuracy (auto-scored) | Median s | Max s |
-|---|---|---|---|---|---|---|---|
-| image | 25 | 21 | 3 | 1 | 95% | 7.8 | 27.0 |
-| audio | 20 | 11 | 9 | 0 | 100% | 7.2 | 10.3 |
-| text | 20 | 18 | 2 | 0 | 100% | 5.1 | 8.1 |
-| video | 15 | 2 | 13 | 0 | 100% | 62.5 | 95.7 |
-| code | 20 | 19 | 0 | 1 | 95% | 18.5 | 38.0 |
+| Input | Items | Automatically verified | Needs review | Wrong / error | Median s | Max s |
+|---|---|---|---|---|---|---|
+| image | 25 | 21 | 3 | 1 | 7.8 | 27.0 |
+| audio | 20 | 11 | 9 | 0 | 7.2 | 10.3 |
+| text | 20 | 18 | 2 | 0 | 5.1 | 8.1 |
+| video | 15 | 2 | 13 | 0 | 62.5 | 95.7 |
+| code | 20 | 19 | 0 | 1 | 18.5 | 38.0 |
 
 **Overall: 71/100 correct automatically**; 27 free-form answers need a person to check.
 

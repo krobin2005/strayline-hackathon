@@ -196,8 +196,8 @@ def write_summary(rows: list[dict], pack: Path, out: Path):
         f"models `{llm.VISION_MODEL}` and `{llm.GENERAL_MODEL}` through Ollama, Wi-Fi not required.",
         f"Pack: `{pack.name}` ({len(rows)} items). Per-item answers stay local in `data/eval/` (pack rules).",
         "",
-        "| Input | Items | Correct | Needs review | Wrong / error | Accuracy (auto-scored) | Median s | Max s |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Input | Items | Automatically verified | Needs review | Wrong / error | Median s | Max s |",
+        "|---|---|---|---|---|---|---|",
     ]
     for mod in ["image", "audio", "text", "video", "code"]:
         group = by_mod.get(mod)
@@ -206,10 +206,8 @@ def write_summary(rows: list[dict], pack: Path, out: Path):
         c = sum(r["score"] == "correct" for r in group)
         rv = sum(r["score"] == "review" for r in group)
         w = len(group) - c - rv
-        scored = c + w
         secs = [r["seconds"] for r in group]
-        acc = f"{100 * c / scored:.0f}%" if scored else "-"
-        lines.append(f"| {mod} | {len(group)} | {c} | {rv} | {w} | {acc} | {statistics.median(secs):.1f} | {max(secs):.1f} |")
+        lines.append(f"| {mod} | {len(group)} | {c} | {rv} | {w} | {statistics.median(secs):.1f} | {max(secs):.1f} |")
     total_c = sum(r["score"] == "correct" for r in rows)
     lines += ["", f"**Overall: {total_c}/{len(rows)} correct automatically**; "
                   f"{sum(r['score'] == 'review' for r in rows)} free-form answers need a person to check.",
