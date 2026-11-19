@@ -176,12 +176,12 @@ Two judges give one score each, so the pitch has to show all five inputs fast.
 
 | Time | Beat |
 |---|---|
-| 0:00–0:40 | **User and problem.** "A small college's security team is a handful of people defending a whole campus. Their evidence (logs, screenshots, voicemails) holds private data, so cloud AI is off the table." |
-| 0:40–3:40 | **Live, Wi-Fi off, phone in hand.** About 30 s per input: phishing screenshot → verdict; scam voicemail → transcript + "they want gift cards" + "office noise in background"; runbook question → answer with the page, then a question the runbook can't answer → "not in the document"; "write a port-scan finder" → code runs on the log → hosts listed; screen recording → step-by-step description |
-| 3:40–4:20 | **Strayline detector:** one day of traffic → top incident → its supporting counts → ask "what is this host doing?" |
-| 4:20–5:00 | **Proof.** Test-results table (per-modality accuracy, seconds per item), hardware, one timed team rehearsal |
+| 0:00–0:30 | **User and problem.** A campus IT analyst needs to triage a suspicious report while keeping the evidence on the laptop. |
+| 0:30–2:05 | **Start video first.** Use the team's existing security clip. While it runs, explain the local models and why Strayline exposes each answer's supporting evidence. Show the sampled frames when the answer returns. |
+| 2:05–4:20 | **Finish the same case with the other four inputs.** Show an image answer, the audio transcript, a supported runbook answer plus a detail the runbook doesn't contain, and a short Python function with its test result. Show the analyst's next action. |
+| 4:20–5:00 | **Proof.** Show the organizer practice-pack counts by modality, distinguish automatically verified from provisional AI-reviewed results, name the hardware, and share any measured team rehearsal result. |
 
-**15-minute final:** the same demo slower, then architecture and model choices, test results in detail, named limits, impact evidence, and questions.
+**15-minute final:** the same demo slower, then the full network-log replay, architecture and model choices, detailed test results, limits, impact evidence, and questions.
 
 ### Questions to prepare for
 
@@ -189,7 +189,7 @@ Two judges give one score each, so the pitch has to show all five inputs fast.
 - What fails? (Name it from our test results: sound ID, counting in video, long documents.)
 - How do you stop it making things up on documents? (Retrieval + an explicit "not found" check, shown live.)
 - Is the generated code safe to run? (Sandboxed: timeout, no network, temp directory.)
-- Why a security team? (Data that can't leave + a real contact who tried it.)
+- Why a security team? (Sensitive campus evidence stays local. Describe the team rehearsal if it was completed.)
 - How fast on modest hardware? (Seconds per item from the harness.)
 - Did you build this before? (The detector idea is from Kyle's earlier research; all code in this repo was written at the event, as the commit history shows.)
 

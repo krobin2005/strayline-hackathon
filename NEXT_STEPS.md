@@ -1,91 +1,18 @@
-# Next steps
+# Strayline Desk handoff for the team and Claude
 
-Where we are (Wed Nov 18, evening): the app works end to end, offline, for all five inputs plus logs. The practice pack scores **71/100 proven automatically, 93/100 after a provisional review** (image 23/25, audio 18/20, text 20/20, video 13/15, code 19/20; a teammate should confirm the review). Everything is on GitHub.
+Updated Thursday, November 19, 2026. The latest app changes are on the working repo's `main`. The immediate priorities are the official IEEE submission and a timed offline rehearsal.
 
-**Hard deadline: code must be in our IEEE GitHub repo by end of day Thursday Nov 19.** Write access is cut after that. Friday is presentations only, with no code changes.
+## What shipped
 
-Each item lists roughly how long it takes and what "done" looks like. Work top to bottom.
+- `840b64c` restored separate video frames for inference and kept the contact sheet as visible evidence. Separate frames scored **13/15 on provisional review**, with a **62.5 s median** and **95.7 s max**. The faster contact-sheet inference trial scored **6/15**, with six empty answers. Keep the current models and video path for judging.
+- `e33cd79` fixed Enter submitting during an upload or active response. It also changed the benchmark table to verified counts and review counts. The focused checks and all 13 unit tests passed.
+- `6b54992` made evidence panels open by default. They remain collapsible. The rendering check passed, and a localhost API smoke check confirmed the runbook returned the correct group and supporting passage. The server was started in laptop-only mode for that check.
 
----
+## Submission and rehearsal
 
-## Thursday morning (9:00–12:00): must-do
+1. **Submit to the official IEEE repo by Thursday EOD.** Access was still pending at this handoff. Once the team receives the repo URL and has write access, push the tested `main` history there. Have a teammate open the official repo and verify the final commit and README. Friday is for presentations.
+2. **Use the team's existing cybersecurity assets in the live pitch.** Walk through one campus IT case and show all five required inputs. Use the source evidence to explain the analyst's next action. Start the video early and explain local processing while it runs. Save the full network-log replay for the final if it crowds the first round. See [the timed script](PLAN.md#6-the-5-minute-round-1-pitch).
+3. **Use the organizers' practice pack for benchmark evidence.** Show **71/100 automatically verified** and clearly label **93/100 after provisional AI review**. The second AI check of the 15 saved video outputs found 12 clearly correct, two counting misses, and one borderline answer about whether two shapes touched. A teammate can confirm the provisional grades. Run any judge-provided files through the same app.
+4. **Rehearse on the presentation laptop without internet.** Start Ollama and Strayline before the test. Time the full five-minute pitch, including uploads and answers. Ask one question the runbook answers and one it doesn't. If a teammate times a campus IT task, label the result as an internal rehearsal. Use an offline local network for the optional phone demo. Keep a backup recording available and identify it as a recording if shown.
 
-1. **Get our official repo.** (15 min)
-   - Check email for a reply from Vedanshi or Shubham about the IEEE GitHub org repo. If there's nothing by 10 am, ask in person in classroom 136/137.
-   - Move our history there: `git remote add official <url>` then `git push official main`.
-   - Done when: our commits show up in the IEEE org repo.
-
-2. **Make video faster.** (1 hour)
-   - Right now each clip takes ~65 s because 10 frames cost ~10,500 tokens. Shrinking frames doesn't help.
-   - Try: (a) 6 frames instead of 10–16; (b) tile 4 frames into one image (a 2×2 grid).
-   - Rerun `python -m desk.eval --only video` and compare score and time.
-   - Done when: under ~25 s per clip with the score no worse than 9/15.
-
-3. **Make sound answers more specific.** (30 min)
-   - The classifier says "Vehicle" when "Helicopter" is right behind it.
-   - Tell the answer step to prefer the most specific label listed, and show the top 3 labels to the user.
-   - Rerun `--only audio`.
-   - Done when: helicopter, fire and sneezing come back by name.
-
-4. **Fix the log briefing.** (30 min)
-   - It calls normal incidents "suspicious". Tighten the prompt (base rates: most incidents are harmless) and test on Wednesday's logs.
-   - Done when: incident #1 (the DoS flood) is called out, and the normal incidents below it aren't called attacks.
-
-## Thursday midday (12:00–3:00): demo material and evidence
-
-5. **Make our own demo files.** (1–2 hours, can run in parallel on a second laptop)
-   - 3 phishing screenshots (mock emails we make ourselves; no real people's data).
-   - A short incident-response runbook as a PDF (we write it; 2–3 pages).
-   - 2 scam voicemails we record ourselves ("This is the IT help desk, have your password ready…").
-   - 1 screen recording of a fake "tech support" pop-up (we make it).
-   - Put them in `demo/` only if they contain no private data; otherwise keep them local.
-
-6. **Time a team rehearsal.** One teammate plays the analyst with the [sample case](demo/README.md); another records completion time, evidence used, and any wrong answers. Identify this as an internal exercise on the impact slide.
-
-7. **Phone test.** (15 min)
-   - Start the app, open the printed phone address on a phone on the same Wi-Fi or hotspot, and try an image and a document.
-   - Done when: it works on a phone (that's a judging bonus).
-
-## Thursday afternoon (3:00–9:00): lock it down
-
-8. **Final test run.** (40 min)
-   - `.venv/bin/python -m desk.eval` on the full practice pack. This updates `results/test_results.md` for the slides.
-
-9. **Clean-clone check.** (30 min)
-   - On Liam's or Zac's laptop: clone the repo, run `sh setup.sh`, start the app, then run `tests/smoke_api.py`.
-   - Done when: it works from scratch, which proves the README instructions.
-
-10. **Code freeze at 9 pm.**
-    - Last push to the IEEE repo. Tag it: `git tag final && git push official final`.
-    - Nothing after this.
-
-## Friday (no code): present
-
-11. **Slides** (keep them short):
-    - who it's for and their problem
-    - live demo
-    - architecture: two models plus a sound classifier plus the detector, and why each was chosen
-    - hardware (M4 Pro, 24 GB)
-    - test results table
-    - limits
-    - one measured outcome from the team rehearsal, labeled as such
-
-12. **Rehearse the 5-minute pitch twice with Wi-Fi off.** Show all five inputs in about 3 minutes. The script is in PLAN.md §6.
-
-13. **Prepare for questions:** why these models, what fails, how we stop it making things up, is the code sandbox safe, did you build this before. Answers are in PLAN.md §6.
-
-14. **Before going on stage:**
-    - Start the app a minute early, so the models load.
-    - Charge the laptop and have a phone on the same hotspot.
-    - Keep a backup screen recording of a full run, used only if the live demo fails, and say it's a recording.
-
----
-
-## If we're behind
-
-Cut in this order:
-- the log detector polish (item 4)
-- the phone test (item 7)
-- the video speed-up (item 2): keep the slow version and say so as a named limit
-
-Never cut a whole input type.
+Keep remaining changes small. Fix issues exposed in rehearsal, reuse the existing assets, and keep per-item practice-pack answers local. See [recorded results](results/test_results.md) and [setup instructions](README.md#8-setup-and-run).
