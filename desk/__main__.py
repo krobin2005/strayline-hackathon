@@ -7,6 +7,7 @@ import threading
 import uvicorn
 
 from desk import llm
+from desk.handlers import audio
 
 
 def _lan_address() -> str | None:
@@ -27,4 +28,5 @@ if __name__ == "__main__":
         print(f"  on your phone:   http://{lan}:{port}  (same Wi-Fi or hotspot)")
     print("  loading both models in the background so the first question is fast…\n")
     threading.Thread(target=llm.warm_up, daemon=True).start()
+    threading.Thread(target=audio.classifier, daemon=True).start()
     uvicorn.run("desk.server:app", host="0.0.0.0", port=port)

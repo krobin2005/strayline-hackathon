@@ -47,6 +47,9 @@ say "Downloading the two models (about 13 GB the first time; skipped if already 
 "$OLLAMA" pull "$VISION_MODEL"
 "$OLLAMA" pull "$GENERAL_MODEL"
 
+say "Downloading the sound classifier (~350 MB, once)"
+.venv/bin/python -c "from desk.handlers import audio; audio.classifier(); print('sound classifier ok')"
+
 say "Quick check"
 .venv/bin/python - <<'EOF'
 from desk import llm

@@ -26,8 +26,9 @@ NOT_FOUND_MESSAGE = "This isn't in the document."
 SYSTEM = (
     "You answer questions about a document using ONLY the numbered passages provided. "
     "Do not use outside knowledge. If the passages do not contain the answer, reply with exactly "
-    f"{NOT_FOUND} and nothing else. Otherwise answer in one to three sentences and cite the page, "
-    "like (p. 3)."
+    f"{NOT_FOUND} and nothing else. Also reply {NOT_FOUND} if the question's specific details (numbers, "
+    "names, dates) don't match what the passages say, instead of answering a different question. "
+    "Otherwise answer in one to three sentences and cite the page, like (p. 3)."
 )
 
 _STOPWORDS = set(

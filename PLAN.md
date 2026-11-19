@@ -100,8 +100,9 @@ Router (plain code, by file type, not an LLM)
 - [x] Practice-pack harness (`python -m desk.eval`), checked on a synthetic stand-in pack (10/11)
 - [x] Strayline detector (lite) on Wednesday: 0.44% false alarms, DoS flood is incident #1
 - [x] `setup.sh` for teammates' laptops; `tests/smoke_api.py` checks every input in ~2 min
-- [ ] **Download the practice pack** (Kaggle login needed) and run the harness for real numbers
-- [ ] Test real sound recordings (pure tones fail); tune the log-briefing prompt (it over-flags normal incidents)
+- [x] Practice pack run: **86/100** automatically (image 23/25, audio 14/20, text 20/20, video 9/15, code 20/20); see results/test_results.md
+- [ ] Speed up video (~65 s now): fewer or tiled frames; prefer specific sound labels ("Helicopter" over "Vehicle")
+- [ ] Tune the log-briefing prompt (it over-flags normal incidents)
 - [ ] Try the app from a phone; demo inputs (phishing screenshots, runbook, voicemails, screen recordings)
 - [ ] User feedback session, slides, rehearsal; move history to the IEEE org repo before Thu EOD
 

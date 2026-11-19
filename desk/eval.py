@@ -35,7 +35,7 @@ from .handlers import audio, code, document, image, video
 ROOT = Path(__file__).resolve().parent.parent
 _NUMBER_WORDS = {w: i for i, w in enumerate(
     "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen "
-    "sixteen seventeen eighteen nineteen twenty".split())}
+    "sixteen seventeen eighteen nineteen twenty".split())} | {"hundred": 100, "thousand": 1000}
 _STOP = set("a an the of to in on at and or is are was were it this that there with for by as be".split())
 
 
@@ -100,7 +100,7 @@ def run_unit_tests(solution: str, test_file: Path, entry_point: str | None) -> t
 # ---------- scoring ----------
 
 def _norm(s: str) -> str:
-    s = s.lower().replace("’", "'")
+    s = s.lower().replace("’", "'").replace("'s ", " ").replace("s' ", "s ")
     s = re.sub(r"[^a-z0-9' ]+", " ", s)
     return " ".join(w for w in s.split() if w not in _STOP)
 
@@ -111,11 +111,19 @@ def _numbers(s: str) -> list[int]:
     return found
 
 
+def _final_answer(text: str) -> str:
+    """If the model wrote reasoning first, score only its stated answer."""
+    m = re.split(r"\*\*\s*answer\s*:?\s*\*\*\s*:?|\banswer\s*:", text, flags=re.I)
+    return m[-1] if len(m) > 1 else text
+
+
 def score(item: dict, answer: dict, ours: str, extra: dict) -> str:
     """Return 'correct', 'wrong' or 'review'."""
     modality = item["modality"]
     if modality == "code":
         return "correct" if extra.get("unit_tests_passed") else "wrong"
+    if ours.startswith("ERROR:"):
+        return "wrong"
 
     said_not_found = document.NOT_FOUND_MESSAGE.lower() in ours.lower()
     if modality == "text" and answer.get("answerable") is False:
@@ -123,24 +131,38 @@ def score(item: dict, answer: dict, ours: str, extra: dict) -> str:
     if modality == "text" and said_not_found:
         return "wrong"
 
+    question = item.get("question") or ""
     reference = str(answer.get("reference_answer") or "")
-    ref_head = re.split(r"[.(;]", reference, maxsplit=1)[0]  # e.g. "1 (1 person). A man..." -> "1 "
-    head_numbers = _numbers(ref_head)
-    if head_numbers and len(ref_head.split()) <= 3:
-        return "correct" if head_numbers[0] in _numbers(ours) else "wrong"
+    final = _final_answer(ours)
 
-    # Transcription questions: compare against the full transcript with word error rate.
+    # Transcription questions: word error rate against the full transcript.
     transcript = answer.get("transcript")
-    if transcript and re.search(r"transcri|what (is|was) (said|being said)|exact words", item.get("question", ""), re.I):
+    if transcript and re.search(r"transcri|what (is|was) (said|being said)|exact words", question, re.I):
         return "correct" if word_error_rate(transcript, ours) <= 0.25 else "review"
 
-    ref, got = _norm(reference), _norm(ours)
+    # Counting questions: the reference's count must be the count we give.
+    ref_numbers = _numbers(reference)
+    if re.match(r"\s*how many\b", question, re.I) and ref_numbers:
+        ours_numbers = _numbers(final)
+        if not ours_numbers:
+            return "review"
+        # "...5 appear, 2 disappear, so 3 are left": when the question asks what's left, the last number counts.
+        asks_end = re.search(r"\b(left|remain|at the end|end up)\b", question, re.I)
+        target = ref_numbers[-1] if asks_end else ref_numbers[0]
+        return "correct" if target in ours_numbers[:2] else "wrong"
+    ref_head = re.split(r"[.(;]", reference, maxsplit=1)[0]
+    head_numbers = _numbers(ref_head)
+    if head_numbers and len(ref_head.split()) <= 3:
+        return "correct" if head_numbers[0] in _numbers(final) else "wrong"
+
+    ref, got = _norm(reference), _norm(final)
     if ref and ref in got:
         return "correct"
     ref_words = set(ref.split())
-    if ref_words and len(ref_words & set(got.split())) / len(ref_words) >= 0.6:
-        return "correct" if len(ref_words) <= 4 else "review"
-    return "review" if len(ref_words) > 4 else "wrong"
+    overlap = len(ref_words & set(got.split())) / len(ref_words) if ref_words else 0
+    if overlap >= 0.6 or (len(ref_words) <= 2 and overlap >= 0.5):
+        return "correct"
+    return "review" if len(ref_words) >= 3 else "wrong"
 
 
 def word_error_rate(reference: str, hypothesis: str) -> float:
@@ -191,12 +213,31 @@ def write_summary(rows: list[dict], pack: Path, out: Path):
     out.write_text("\n".join(lines) + "\n")
 
 
+def rescore(pack: Path, items: list[dict], answers: dict, runs: list[Path], summary: Path):
+    latest = {}
+    for run in runs:
+        for line in run.read_text().splitlines():
+            d = json.loads(line)
+            latest[d["id"]] = d
+    rows = []
+    by_id = {i["id"]: i for i in items}
+    for item_id, d in latest.items():
+        if item_id not in by_id:
+            continue
+        verdict = score(by_id[item_id], answers.get(item_id, {}), str(d["ours"]), d)
+        rows.append({"id": item_id, "modality": d["modality"], "score": verdict, "seconds": d["seconds"]})
+    write_summary(rows, pack, summary)
+    print(open(summary).read())
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--pack", default=str(ROOT / "data/practice/practice_pack"))
     ap.add_argument("--only", choices=["image", "audio", "text", "video", "code"])
     ap.add_argument("--limit", type=int, default=0, help="at most this many items per input type")
     ap.add_argument("--summary", default=str(ROOT / "results/test_results.md"))
+    ap.add_argument("--rescore", nargs="+", metavar="RUN_JSONL",
+                    help="rescore earlier runs from data/eval/ without calling the models (later files win per item)")
     args = ap.parse_args()
 
     pack = Path(args.pack)
@@ -214,6 +255,10 @@ def main():
     # Group by input type so each model loads once.
     items.sort(key=lambda i: ["image", "video", "text", "audio", "code"].index(i["modality"])
                if i["modality"] in ("image", "video", "text", "audio", "code") else 9)
+
+    if args.rescore:
+        rescore(pack, items, answers, [Path(p) for p in args.rescore], Path(args.summary))
+        return
 
     detail_dir = ROOT / "data/eval"
     detail_dir.mkdir(parents=True, exist_ok=True)

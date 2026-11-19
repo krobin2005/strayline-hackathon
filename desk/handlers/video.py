@@ -9,9 +9,9 @@ from .. import llm
 from ..router import VIDEO
 from . import Answer
 
-MIN_FRAMES = 8
+MIN_FRAMES = 10
 MAX_FRAMES = 16
-SECONDS_PER_FRAME = 2.0  # longer clips get more frames, up to MAX_FRAMES
+SECONDS_PER_FRAME = 1.0  # one frame a second (counts and bounces need it), between MIN and MAX frames
 MAX_SIDE = 512
 # Each 512-px frame costs roughly 400-1,100 tokens in Qwen3-VL; llm.CONTEXT gives the vision model room for 16.
 
@@ -19,8 +19,9 @@ SYSTEM = (
     "You are Strayline Desk, an assistant for a college IT security team. You are given frames "
     "sampled in order from one short video, each labelled with its time. Treat them as a single "
     "clip. Track how things move and change between frames. When counting, count distinct objects "
-    "across the whole clip, not per frame, and say how you counted. Quote any visible text exactly. "
-    "If the frames can't answer the question, say so."
+    "across the whole clip, not per frame: objects that appear one at a time each count. Quote any "
+    "visible text exactly. Answer directly in one or two sentences; do not describe the frames one by "
+    "one. If the frames can't answer the question, say so."
 )
 DEFAULT_QUESTION = (
     "Describe what happens in this video in at most 5 short bullet points with approximate times, "
@@ -76,7 +77,7 @@ def answer(data: bytes, filename: str, question: str) -> Answer:
     labels = ", ".join(f"frame {i + 1} at {t:.1f} s" for i, t in enumerate(times))
     prompt = (f"These are {len(frames)} frames from a {length:.1f}-second video, in order: {labels}.\n\n"
               f"{question.strip() or DEFAULT_QUESTION}")
-    text, seconds = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=frames)
+    text, seconds = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=frames, max_tokens=2048)
     evidence = [f"{len(frames)} frames sampled from a {length:.1f} s clip at: "
                 + ", ".join(f"{t:.1f} s" for t in times)]
     return Answer(text=text, kind=VIDEO, model=llm.VISION_MODEL, seconds=seconds, evidence=evidence)

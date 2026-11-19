@@ -161,14 +161,25 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 - **Harness:** `python -m desk.eval` runs every item through the same handlers as the app and writes `results/test_results.md` (aggregates only). Scoring: code by the pack's own unit tests in the sandbox; unanswerable text questions must say "not in the document"; counts by the number; transcripts by word error rate (≤ 25%); short answers by normalized match; long free-form answers marked "needs review" for a person instead of guessed. Checked on a synthetic stand-in pack: 10/11 (the miss was a pure test tone, see Limits).
 - **Detector:** share of attack connections alerted and the false-alarm rate on the demo day's benign traffic.
 
-*(Results table goes here.)*
+**Practice pack, 100 items (Nov 18), [full table](results/test_results.md): 86/100 correct automatically, 5 more need a person to check.**
+
+| Input | Correct | Median time |
+|---|---|---|
+| Image | 23/25 | 11.5 s |
+| Audio | 14/20 (+2 to check) | 5.6 s |
+| Text | 20/20 | 5.3 s |
+| Video | 9/15 (+3 to check) | 65 s |
+| Code | 20/20 (pack's unit tests) | 17 s |
+
+What moved the numbers: an AudioSet sound classifier lifted sound items from ~1/10 (Gemma 4 alone) to most correct; a "details don't match → not in the document" rule fixed the last text miss.
 
 ---
 
 ## 7. Limits (named, not hidden)
 
 *(Update from the practice-pack results.)* So far:
-- Sound identification is the weakest input. Pure synthetic tones often can't be identified (the model may say it heard nothing); real recordings are still to be tested on the practice pack.
+- Sounds: the classifier sometimes gives a generic label ("Vehicle" for a helicopter, "Crackle" for a fire) or mishears (ocean waves → boat). Pure synthetic tones can't be identified.
+- Video is the slowest input (~65 s): 10 frames cost ~10,500 tokens in Qwen3-VL, and shrinking frames doesn't help (Ollama resizes them itself). Next step: fewer frames, or several frames tiled into one image. Counting objects that appear one at a time and counting bounces are the weak questions.
 - A cold video question takes ~50 s while Qwen3-VL loads with its 20k-token context. The app pre-loads both models at start (Gemma first, then Qwen3-VL; the other order evicted Qwen3-VL), after which a video question takes ~5 s. Start the app a minute before the demo.
 - On a phone, the mic button is hidden: browsers only allow the mic on secure pages, and the laptop's local address is plain http. Phones can upload a voice memo instead.
 - Counting and fast motion in video depend on frame sampling.

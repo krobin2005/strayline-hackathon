@@ -1,56 +1,67 @@
-"""Audio: transcribe speech, identify sounds, answer questions. All with Gemma 4 E4B, which hears audio.
+"""Audio: identify sounds, transcribe speech, answer questions.
 
-Gemma 4 takes WAV through Ollama's `images` field. Two things from our tests (README §3):
-- it handles short clips best, so long audio is transcribed in ~25-second pieces;
-- for sound identification it needs to be told the clip is a sound, and very short clips are
-  looped to ~3 seconds.
+- Sounds: a small open-weight audio classifier trained on AudioSet's 527 everyday sound classes
+  (MIT/ast-finetuned-audioset, BSD-3). Gemma 4 alone named only ~1 in 10 environmental sounds in the
+  practice pack; the classifier got 9 in 10 in its top 3, in ~0.1 s.
+- Speech: Gemma 4 E4B transcribes (WAV through Ollama's `images` field) in ~25-second pieces, which it
+  handles best. Skipped when the classifier hears no speech, so it can't invent words.
+- Answers: Gemma 4 answers from the transcript, the sound labels and (for speech) the clip itself.
 """
 
 import io
-import re
+import os
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 import wave
 from pathlib import Path
+
+import numpy as np
 
 from .. import llm
 from ..router import AUDIO
 from . import Answer
 
 PIECE_SECONDS = 25
-MIN_SOUND_SECONDS = 3.0
 NO_SPEECH = "NO_SPEECH"
+SOUND_MODEL = "MIT/ast-finetuned-audioset-10-10-0.4593"
+SPEECH_LABELS = {"Speech", "Male speech, man speaking", "Female speech, woman speaking", "Child speech, kid speaking",
+                 "Conversation", "Narration, monologue", "Speech synthesizer", "Babbling", "Whispering"}
 
 TRANSCRIBE_PROMPT = (
     "Transcribe the speech in this audio exactly, word for word. Output only the transcript. "
     f"If there is no speech at all, output exactly {NO_SPEECH}."
 )
-SOUNDS_PROMPT = (
-    "Listen to this audio clip and identify the sounds in it. Ignore the meaning of any words. "
-    "Common kinds of sound include: animals (dog, cat, rooster, birds), weather and water (rain, "
-    "waves, wind, thunder), fire crackling, people (talking, a baby crying, laughing, coughing, "
-    "sneezing, footsteps), machines and vehicles (engine, helicopter, chainsaw, car horn, siren), "
-    "household (clock ticking, door knock, phone ringing, typing, water running), electronic beeps or "
-    "tones, and music. Answer with a short comma-separated list, most prominent first. "
-    "Only include people talking if you actually hear a human voice."
-)
-SHORT_SOUNDS_PROMPT = (
-    "Listen to this audio clip. It contains a sound, not speech. Identify the sound: what object, animal, "
-    "instrument, alarm or event most likely made it? Give your best guess in under 10 words."
-)
-_DIDNT_HEAR = re.compile(r"no audio|not provided|cannot hear|can't hear|unable to (hear|listen)|provide the audio", re.I)
-
 ANSWER_SYSTEM = (
-    "You are Strayline Desk, an assistant for a college IT security team. Answer the question about "
-    "the audio clip using the clip itself, its transcript and the list of sounds. If the audio does "
-    "not contain the answer, say so. Be brief. If the caller asks for passwords, codes, payment or "
+    "You are Strayline Desk, an assistant for a college IT security team. Answer the question about an "
+    "audio clip using its transcript and the sounds an audio classifier identified (with confidence). "
+    "For 'what sound is this' questions, name the most likely sound source in a few words. If the audio "
+    "does not contain the answer, say so. Be brief. If a caller asks for passwords, codes, payment or "
     "urgent action, point that out."
 )
 
 
 class AudioError(ValueError):
     pass
+
+
+_classifier = None
+_classifier_lock = threading.Lock()
+
+
+def classifier():
+    """Load the sound classifier once. Works offline after the first download (setup.sh does that)."""
+    global _classifier
+    with _classifier_lock:
+        if _classifier is None:
+            from huggingface_hub import try_to_load_from_cache
+            if isinstance(try_to_load_from_cache(SOUND_MODEL, "config.json"), str):
+                os.environ.setdefault("HF_HUB_OFFLINE", "1")  # cached: never touch the network
+            from transformers import pipeline
+            _classifier = pipeline("audio-classification", model=SOUND_MODEL, device="cpu")
+        return _classifier
 
 
 def to_wav(data: bytes, filename: str) -> bytes:
@@ -97,15 +108,24 @@ def pieces(wav_bytes: bytes, seconds: float = PIECE_SECONDS) -> list[bytes]:
     return [_write(params, frames[i:i + step]) for i in range(0, max(len(frames), 1), step)] or [wav_bytes]
 
 
-def looped(wav_bytes: bytes, min_seconds: float = MIN_SOUND_SECONDS) -> bytes:
-    """Repeat a very short clip (with small gaps) until it lasts at least `min_seconds`."""
+def _samples(wav_bytes: bytes) -> tuple[np.ndarray, int]:
     params, frames = _read(wav_bytes)
-    length = params.nframes / params.framerate
-    if length >= min_seconds or not frames:
-        return wav_bytes
-    gap = b"\x00" * (int(0.3 * params.framerate) * params.sampwidth * params.nchannels)
-    repeats = int(min_seconds / (length + 0.3)) + 1
-    return _write(params, (frames + gap) * repeats)
+    if params.sampwidth != 2:
+        raise AudioError("Expected 16-bit audio.")
+    x = np.frombuffer(frames, np.int16).astype(np.float32) / 32768
+    if params.nchannels > 1:
+        x = x.reshape(-1, params.nchannels).mean(1)
+    return x, params.framerate
+
+
+def identify_sounds(wav_bytes: bytes, top: int = 3, min_score: float = 0.05) -> tuple[list[tuple[str, float]], float]:
+    """Top sound labels with confidence, from the first 10 seconds (the classifier's window)."""
+    start = time.monotonic()
+    x, rate = _samples(wav_bytes)
+    out = classifier()({"raw": x[: rate * 10], "sampling_rate": rate}, top_k=8)
+    labels = [(o["label"], float(o["score"])) for o in out if o["score"] >= min_score][:top] or \
+             [(out[0]["label"], float(out[0]["score"]))]
+    return labels, time.monotonic() - start
 
 
 def transcribe(wav_bytes: bytes) -> tuple[str, float]:
@@ -118,42 +138,24 @@ def transcribe(wav_bytes: bytes) -> tuple[str, float]:
     return " ".join(parts), total
 
 
-def identify_sounds(wav_bytes: bytes, has_speech: bool) -> tuple[str, float]:
-    # Listen to the first piece only; it's enough to name the sounds and keeps this fast.
-    first = pieces(wav_bytes)[0]
-    prompt = SOUNDS_PROMPT + ("" if has_speech else " A speech check found no words in this clip.")
-    text, seconds = llm.chat(llm.GENERAL_MODEL, prompt, media=[looped(first)], max_tokens=600)
-    if _DIDNT_HEAR.search(text):
-        # Simple tones sometimes make the model claim there's no audio; a shorter prompt usually works.
-        text, more = llm.chat(llm.GENERAL_MODEL, SHORT_SOUNDS_PROMPT, media=[looped(first, 4.0)], max_tokens=600)
-        seconds += more
-        if _DIDNT_HEAR.search(text):
-            text = "(couldn't identify the sounds)"
-    return text, seconds
-
-
 def answer(data: bytes, filename: str, question: str) -> Answer:
     wav_bytes = to_wav(data, filename)
     length = duration(wav_bytes)
-    transcript, t1 = transcribe(wav_bytes)
-    try:
-        sounds, t2 = identify_sounds(wav_bytes, bool(transcript))
-    except llm.ModelError:
-        sounds, t2 = "(couldn't identify the sounds)", 0.0
-    evidence = [
-        f"Transcript: {transcript or '(no speech)'}",
-        f"Sounds: {sounds}",
-        f"Length: {length:.1f} s",
-    ]
+    sounds, t0 = identify_sounds(wav_bytes)
+    has_speech = any(label in SPEECH_LABELS and score >= 0.15 for label, score in sounds)
+    transcript, t1 = transcribe(wav_bytes) if has_speech else ("", 0.0)
+    sound_text = ", ".join(f"{label} ({100 * score:.0f}%)" for label, score in sounds)
+    evidence = [f"Sounds (audio classifier): {sound_text}",
+                f"Transcript: {transcript or '(no speech)'}", f"Length: {length:.1f} s"]
 
     question = question.strip()
     if not question:
-        text = (f"Transcript: {transcript}" if transcript else "No speech in this clip.") + f"\n\nSounds: {sounds}"
-        return Answer(text=text, kind=AUDIO, model=llm.GENERAL_MODEL, seconds=t1 + t2, evidence=evidence)
+        text = f"Sounds: {sound_text}" + (f"\n\nTranscript: {transcript}" if transcript else "\n\nNo speech in this clip.")
+        return Answer(text=text, kind=AUDIO, model=llm.GENERAL_MODEL, seconds=t0 + t1, evidence=evidence)
 
-    prompt = (f"Transcript: {transcript or '(no speech: this clip has no spoken words)'}\nSounds heard: {sounds}\n\n"
+    prompt = (f"Sounds identified: {sound_text}\nTranscript: {transcript or '(no speech in this clip)'}\n\n"
               f"Question: {question}")
-    # Short clips go along with the question so the model can also listen for itself.
+    # Speech clips go along with the question so the model can also listen for tone and details.
     media = [wav_bytes] if transcript and length <= PIECE_SECONDS else None
-    text, t3 = llm.chat(llm.GENERAL_MODEL, prompt, system=ANSWER_SYSTEM, media=media)
-    return Answer(text=text, kind=AUDIO, model=llm.GENERAL_MODEL, seconds=t1 + t2 + t3, evidence=evidence)
+    text, t2 = llm.chat(llm.GENERAL_MODEL, prompt, system=ANSWER_SYSTEM, media=media)
+    return Answer(text=text, kind=AUDIO, model=llm.GENERAL_MODEL, seconds=t0 + t1 + t2, evidence=evidence)
