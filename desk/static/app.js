@@ -54,6 +54,22 @@ function addUserMessage(question, att) {
     }
   }
   el.appendChild(document.createTextNode(question || "(no question: describe it)"));
+  if (att && att.id) {
+    const again = document.createElement("button");
+    again.type = "button";
+    again.className = "reuse";
+    again.textContent = "Ask about this file";
+    again.addEventListener("click", () => {
+      if (answering) return;
+      uploadVersion++;
+      uploading = false;
+      attachment = att;
+      showChip();
+      sendButton.disabled = false;
+      input.focus();
+    });
+    el.appendChild(again);
+  }
   log.appendChild(el);
   scrollDown();
 }
@@ -186,6 +202,19 @@ async function toWav(blob, name) {
   return new File([buffer], name.replace(/\.[^.]+$/, "") + ".wav", { type: "audio/wav" });
 }
 
+// Upload one file and return its attachment record; throws on failure.
+async function sendFile(file) {
+  if (file.type.startsWith("audio/") && file.type !== "audio/wav") {
+    try { file = await toWav(file, file.name); } catch { /* server converts instead */ }
+  }
+  const body = new FormData();
+  body.append("file", file);
+  const r = await fetch("/api/upload", { method: "POST", body });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || "Upload failed");
+  return { ...data, previewUrl: data.kind === "image" ? URL.createObjectURL(file) : null };
+}
+
 async function uploadFile(file) {
   const version = ++uploadVersion;
   attachment = null;
@@ -194,17 +223,10 @@ async function uploadFile(file) {
   chip.hidden = false;
   document.getElementById("chip-kind").textContent = "Uploading";
   document.getElementById("chip-name").textContent = file.name;
-  if (file.type.startsWith("audio/") && file.type !== "audio/wav") {
-    try { file = await toWav(file, file.name); } catch { /* server converts instead */ }
-  }
-  const body = new FormData();
-  body.append("file", file);
   try {
-    const r = await fetch("/api/upload", { method: "POST", body });
-    const data = await r.json();
+    const att = await sendFile(file);
     if (version !== uploadVersion) return;
-    if (!r.ok) throw new Error(data.detail || "Upload failed");
-    attachment = { ...data, previewUrl: data.kind === "image" ? URL.createObjectURL(file) : null };
+    attachment = att;
     showChip();
     input.focus();
   } catch (err) {
@@ -224,10 +246,77 @@ async function uploadFile(file) {
 }
 
 fileInput.addEventListener("change", () => {
-  const file = fileInput.files[0];
+  const files = [...fileInput.files];
   fileInput.value = "";
-  if (file) uploadFile(file);
+  handleFiles(files);
 });
+
+function handleFiles(files) {
+  if (!files.length || answering) return;
+  if (files.length === 1) uploadFile(files[0]);
+  else runCase(files);
+}
+
+// Drop files anywhere on the page. Without this, Safari drops the file's path into the text box.
+document.addEventListener("dragover", (e) => {
+  if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); document.body.classList.add("dropping"); }
+}, true);
+document.addEventListener("dragleave", (e) => {
+  if (!e.relatedTarget) document.body.classList.remove("dropping");
+}, true);
+document.addEventListener("drop", (e) => {
+  if (!e.dataTransfer.files.length) return;
+  e.preventDefault();
+  e.stopPropagation();
+  document.body.classList.remove("dropping");
+  handleFiles([...e.dataTransfer.files]);
+}, true);
+
+// Several files at once (a "case"): each is analysed in turn, in filename order, with the question
+// typed in the box or, if it's empty, the default for its kind. Answers appear as they finish, so
+// the page can run in the background while presenting; "Ask about this file" picks one for follow-ups.
+const CASE_DEFAULTS = {
+  audio: "Summarize what is said, name any background sounds, and flag anything suspicious.",
+};
+
+async function runCase(files) {
+  if (uploading || answering) return;
+  answering = true;
+  sendButton.disabled = true;
+  uploadVersion++;
+  attachment = null;
+  const typed = input.value.trim();
+  input.value = "";
+  autosize();
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  let done = 0;
+  for (const [i, file] of files.entries()) {
+    chip.hidden = false;
+    document.getElementById("chip-kind").textContent = `Case ${i + 1} of ${files.length}`;
+    document.getElementById("chip-name").textContent = file.name;
+    let att;
+    try {
+      att = await sendFile(file);
+    } catch (err) {
+      hideWelcome();
+      const el = document.createElement("div");
+      log.appendChild(el);
+      fillError(el, `${file.name}: ${err.message}`);
+      continue;
+    }
+    if (await askAbout(typed || CASE_DEFAULTS[att.kind] || "", att)) done++;
+  }
+  chip.hidden = true;
+  const note = document.createElement("div");
+  note.className = "msg bot";
+  note.textContent = `Case finished: ${done} of ${files.length} files answered. ` +
+    "Press \"Ask about this file\" on any of them to ask a follow-up.";
+  log.appendChild(note);
+  scrollDown();
+  answering = false;
+  sendButton.disabled = false;
+  input.focus();
+}
 
 // Mic recording. Browsers only allow the mic on secure pages (localhost counts), so on a phone
 // using the laptop's network address the button stays hidden; upload a voice memo instead.
@@ -265,33 +354,40 @@ form.addEventListener("submit", async (event) => {
   const question = input.value.trim();
   if (!question && !attachment) { input.focus(); return; }
   answering = true;
-  addUserMessage(question, attachment);
   input.value = "";
   autosize();
   sendButton.disabled = true;
+  await askAbout(question, attachment);
+  answering = false;
+  sendButton.disabled = uploading;
+  input.focus();
+});
+
+// Show the question, ask the server, and fill in the answer. Returns true if an answer came back.
+async function askAbout(question, att) {
+  addUserMessage(question, att);
   const looksLikeCode = /\b(write|create|generate|implement|build|make)\b.{0,60}\b(function|script|program|code|class|regex|parser|query|snippet|method)\b|\bin python\b|^\s*(def |from \w+ import |import \w+)/im;
-  const pendingKind = attachment ? attachment.kind : (looksLikeCode.test(question) ? "code" : null);
+  const pendingKind = att ? att.kind : (looksLikeCode.test(question) ? "code" : null);
   const pending = addPending(pendingKind);
   try {
     const r = await fetch("/api/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, attachment_id: attachment ? attachment.id : null }),
+      body: JSON.stringify({ question, attachment_id: att ? att.id : null }),
     });
     const data = await r.json();
     pending.stop();
-    if (!r.ok) fillError(pending.el, data.detail || "Something went wrong.");
-    else fillAnswer(pending.el, data);
+    if (!r.ok) { fillError(pending.el, data.detail || "Something went wrong."); return false; }
+    fillAnswer(pending.el, data);
+    return true;
   } catch {
     pending.stop();
     fillError(pending.el, "Lost contact with the Strayline Desk server.");
+    return false;
   } finally {
-    answering = false;
-    sendButton.disabled = uploading;
     scrollDown();
-    input.focus();
   }
-});
+}
 
 // Enter sends; Shift+Enter makes a new line.
 input.addEventListener("keydown", (e) => {

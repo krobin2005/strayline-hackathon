@@ -105,3 +105,7 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 }
 
 .frame-sheet { display: block; max-width: 100%; height: auto; margin-top: .5rem; }
+
+.msg .reuse { display: block; margin-top: 6px; border: 0; background: none; color: inherit; opacity: .8;
+  text-decoration: underline; cursor: pointer; padding: 0; font: inherit; font-size: 13px; }
+body.dropping { outline: 3px dashed var(--accent); outline-offset: -8px; }

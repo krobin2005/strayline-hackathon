@@ -64,7 +64,17 @@ On a laptop without that Desktop folder, the same files are in the repo:
 open ~/Projects/strayline-hackathon/demo ~/Projects/strayline-hackathon/data/demo
 ```
 
-## The demo, in order
+## Run the whole case in the background (recommended)
+
+Select all five numbered files in the Finder window (⌘A, or drag a box around them) and drag them onto the Strayline page. Drop them anywhere on the page, not just the text box. You can also press ＋ and pick several files.
+
+The page analyses them one after another, in filename order, while you carry on with the slides: video (~60 s), screenshot, voicemail, runbook, then the logs. The whole case takes about 2 minutes. When it says "Case finished", go back to the page and walk through the answers.
+
+Then show it working live: press **Ask about this file** under any file to ask a follow-up, for example on the runbook, "What is Identity Operations' phone number?" ("This isn't in the document"), or on the logs, "What is int-host-5 doing across incidents 2 and 4?". Ask the code question with no file attached.
+
+If something in the box was typed before dropping, every file gets that question instead of its default.
+
+## The demo, one file at a time
 
 The Desktop folder numbers the files in this order. The case (North Hall College, ticket NH-184) is fictional; see `demo/README.md`.
 
