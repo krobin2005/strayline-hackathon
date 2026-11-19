@@ -9,6 +9,7 @@
 """
 
 import io
+import json
 import math
 import shutil
 import subprocess
@@ -29,6 +30,9 @@ NO_SPEECH = "NO_SPEECH"
 SOUND_RATE = 16000
 SOUND_WINDOW = 10 * SOUND_RATE
 SOUND_MODEL = "MIT/ast-finetuned-audioset-10-10-0.4593"
+# Each classifier label's parent category in the AudioSet ontology (CC BY-SA 4.0), e.g.
+# "Ding-dong" -> Doorbell, so the answer can name what makes the sound.
+PARENTS = json.loads((Path(__file__).with_name("audioset_parents.json")).read_text())
 SPEECH_LABELS = {"Speech", "Male speech, man speaking", "Female speech, woman speaking", "Child speech, kid speaking",
                  "Conversation", "Narration, monologue", "Speech synthesizer", "Babbling", "Whispering"}
 
@@ -38,8 +42,11 @@ TRANSCRIBE_PROMPT = (
 )
 ANSWER_SYSTEM = (
     "You are Strayline Desk, an assistant for a college IT security team. Answer the question about an "
-    "audio clip using its transcript and the sounds an audio classifier identified (with confidence). "
-    "For a sound-identification question, give a brief source name. When a broad label and a specific "
+    "audio clip using its transcript and the sounds an audio classifier identified (with confidence "
+    "and, after 'under', the label's parent category). For a sound-identification question, answer "
+    "with a short phrase naming what makes the sound and what it is doing, such as 'a door slamming' or "
+    "'a phone ringing'. When a label is only the noise itself (such as 'Ding-dong' or 'Clang'), use "
+    "its parent category to name the source. When a broad label and a specific "
     "example of that label both have strong support, name the specific one. When different sources "
     "are plausible, express the uncertainty. Never invent a more specific source. If the audio "
     "does not contain the answer, say so. Be brief. If a caller asks for passwords, codes, payment or "
@@ -158,6 +165,11 @@ def identify_sounds(wav_bytes: bytes) -> tuple[list[tuple[str, float]], bool, fl
     return [(label, score) for label, score in strongest if score >= 0.05], speech, time.monotonic() - start
 
 
+def _describe(label: str, score: float) -> str:
+    parents = PARENTS.get(label)
+    return f"{label} ({100 * score:.0f}%" + (f"; under {', '.join(parents)})" if parents else ")")
+
+
 def transcribe(wav_bytes: bytes) -> tuple[str, float]:
     parts, total = [], 0.0
     for piece in pieces(wav_bytes):
@@ -173,7 +185,7 @@ def answer(data: bytes, filename: str, question: str) -> Answer:
     length = duration(wav_bytes)
     sounds, has_speech, t0 = identify_sounds(wav_bytes)
     transcript, t1 = transcribe(wav_bytes) if has_speech else ("", 0.0)
-    sound_text = ", ".join(f"{label} ({100 * score:.0f}%)" for label, score in sounds) or "No confident identification"
+    sound_text = ", ".join(_describe(label, score) for label, score in sounds) or "No confident identification"
     evidence = [f"Sounds (audio classifier): {sound_text}",
                 f"Transcript: {transcript or '(no speech detected)'}", f"Length: {length:.1f} s"]
 

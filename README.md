@@ -158,18 +158,20 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 - **Harness:** `python -m desk.eval` runs every item through the same handlers as the app and writes `results/test_results.md` (aggregates only). Scoring: code by the pack's own unit tests in the sandbox; unanswerable text questions must say "not in the document"; counts by the number; transcripts by word error rate (≤ 25%); short answers by normalized match; long free-form answers marked "needs review" for a person instead of guessed. Checked on a synthetic stand-in pack: 10/11 (the miss was a pure test tone, see Limits).
 - **Detector:** share of attack connections alerted and the false-alarm rate on the demo day's benign traffic.
 
-**Practice pack, 100 items (Nov 18), [full table](results/test_results.md): 71/100 proven by the strict automatic scorer; 93/100 after a provisional review of the free-form answers by our AI coding assistant. A teammate still needs to confirm that review.**
+**Practice pack, 100 items (Nov 18, audio and code rerun Nov 19), [full table](results/test_results.md): 76/100 proven by the strict automatic scorer; 95/100 after a provisional review of the free-form answers by our AI coding assistant. A teammate still needs to confirm that review.**
 
 | Input | Proven automatically | After provisional review | Median time |
 |---|---|---|---|
 | Image | 21/25 | 23/25 | 8 s |
-| Audio | 11/20 | 18/20 | 7 s |
+| Audio | 15/20 | 19/20 | 7 s |
 | Text | 18/20 | 20/20 | 5 s |
 | Video | 2/15 | 13/15 | 62 s |
-| Code | 19/20 (pack's unit tests) | 19/20 | 19 s |
+| Code | 20/20 (pack's unit tests) | 20/20 | 28 s |
 
 What moved the numbers:
 - **Sounds:** an AudioSet classifier went from about 1/10 with Gemma 4 alone to about 8/10.
+- **Sound answers:** naming the source and action ("a rooster crowing", not "Cock-a-doodle-doo"), with each label's AudioSet parent category, moved audio from 11/20 to 15/20 proven automatically. Measured on the same clips, so it needs a check on new sounds.
+- **Code:** a second fix round took code from 19/20 to 20/20, at a median 28 s instead of 19 s.
 - **Text:** a rule that says "if the details don't match, it's not in the document".
 - **Video:** separate frames instead of one contact sheet (13/15 vs 6/15).
 
@@ -259,5 +261,6 @@ cd data/raw && unzip CICIDS2017_improved.zip
 - CIC-IDS2017, improved version: Engelen, Rimmer & Joosen, "Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case Study" (2021), and the Canadian Institute for Cybersecurity.
 - Models: Qwen3-VL and Qwen2.5-Coder (Alibaba Qwen), Gemma 4 (Google), Whisper (OpenAI), served by Ollama.
 - IEEE AI Hackathon 2026 practice pack (IEEE Student Branch, Roux Institute).
+- AudioSet ontology (Google, CC BY-SA 4.0): the parent category of each sound label, in `desk/handlers/audioset_parents.json`.
 
 *Team: Kyle Robin, Liam Baron, Zac Bower (Bates College).*
