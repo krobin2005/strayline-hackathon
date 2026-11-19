@@ -10,10 +10,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import llm, router
+from .sandbox import SandboxUnavailable
 from .handlers import audio, code, document, image, logs, text, video
 
 STATIC = Path(__file__).parent / "static"
 MAX_UPLOAD_BYTES = 400 * 1024 * 1024  # a full day of CIC-IDS2017 logs is ~290 MB
+
+MAX_STORED_BYTES = 512 * 1024 * 1024
+MAX_ATTACHMENTS = 32
 
 app = FastAPI(title="Strayline Desk")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -56,6 +60,11 @@ async def upload(file: UploadFile = File(...)):
     if kind == router.UNKNOWN:
         raise HTTPException(415, f"I can't read {file.filename!r}. Try an image, audio, video, PDF, text or log file.")
     attachment_id = uuid.uuid4().hex
+    # Reserve room for the new file. Repeated full-day uploads previously grew without bound.
+    retained = sum(len(item.data) for item in _attachments.values())
+    while _attachments and (retained + len(data) > MAX_STORED_BYTES or len(_attachments) >= MAX_ATTACHMENTS):
+        oldest = next(iter(_attachments))
+        retained -= len(_attachments.pop(oldest).data)
     _attachments[attachment_id] = Attachment(name=file.filename or "upload", kind=kind, data=data)
     return {"id": attachment_id, "kind": kind, "name": file.filename}
 
@@ -84,7 +93,7 @@ def ask(body: Ask):
             result = code.answer(question, attachment.name, attachment.data)
         else:
             result = logs.answer(body.attachment_id, attachment.data, attachment.name, question)
-    except llm.ModelError as e:
+    except (llm.ModelError, SandboxUnavailable) as e:
         raise HTTPException(503, str(e)) from e
     except (audio.AudioError, video.VideoError) as e:
         raise HTTPException(422, str(e)) from e

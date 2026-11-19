@@ -9,7 +9,7 @@
 """
 
 import io
-import os
+import math
 import shutil
 import subprocess
 import tempfile
@@ -26,6 +26,8 @@ from . import Answer
 
 PIECE_SECONDS = 25
 NO_SPEECH = "NO_SPEECH"
+SOUND_RATE = 16000
+SOUND_WINDOW = 10 * SOUND_RATE
 SOUND_MODEL = "MIT/ast-finetuned-audioset-10-10-0.4593"
 SPEECH_LABELS = {"Speech", "Male speech, man speaking", "Female speech, woman speaking", "Child speech, kid speaking",
                  "Conversation", "Narration, monologue", "Speech synthesizer", "Babbling", "Whispering"}
@@ -37,7 +39,9 @@ TRANSCRIBE_PROMPT = (
 ANSWER_SYSTEM = (
     "You are Strayline Desk, an assistant for a college IT security team. Answer the question about an "
     "audio clip using its transcript and the sounds an audio classifier identified (with confidence). "
-    "For 'what sound is this' questions, name the most likely sound source in a few words. If the audio "
+    "For a sound-identification question, give a brief source name. When a broad label and a specific "
+    "example of that label both have strong support, name the specific one. When different sources "
+    "are plausible, express the uncertainty. Never invent a more specific source. If the audio "
     "does not contain the answer, say so. Be brief. If a caller asks for passwords, codes, payment or "
     "urgent action, point that out."
 )
@@ -56,11 +60,15 @@ def classifier():
     global _classifier
     with _classifier_lock:
         if _classifier is None:
-            from huggingface_hub import try_to_load_from_cache
-            if isinstance(try_to_load_from_cache(SOUND_MODEL, "config.json"), str):
-                os.environ.setdefault("HF_HUB_OFFLINE", "1")  # cached: never touch the network
+            from huggingface_hub import snapshot_download
+            from huggingface_hub.errors import LocalEntryNotFoundError
             from transformers import pipeline
-            _classifier = pipeline("audio-classification", model=SOUND_MODEL, device="cpu")
+
+            try:
+                directory = snapshot_download(SOUND_MODEL, local_files_only=True)
+            except LocalEntryNotFoundError as error:
+                raise AudioError("The sound model is missing. Run sh setup.sh before going offline.") from error
+            _classifier = pipeline("audio-classification", model=directory, device="cpu")
         return _classifier
 
 
@@ -84,8 +92,11 @@ def to_wav(data: bytes, filename: str) -> bytes:
 
 
 def _read(wav_bytes: bytes):
-    with wave.open(io.BytesIO(wav_bytes)) as w:
-        return w.getparams(), w.readframes(w.getnframes())
+    try:
+        with wave.open(io.BytesIO(wav_bytes)) as w:
+            return w.getparams(), w.readframes(w.getnframes())
+    except (wave.Error, EOFError) as error:
+        raise AudioError("Could not read the audio. Please upload a PCM WAV file.") from error
 
 
 def _write(params, frames: bytes) -> bytes:
@@ -118,14 +129,33 @@ def _samples(wav_bytes: bytes) -> tuple[np.ndarray, int]:
     return x, params.framerate
 
 
-def identify_sounds(wav_bytes: bytes, top: int = 3, min_score: float = 0.05) -> tuple[list[tuple[str, float]], float]:
-    """Top sound labels with confidence, from the first 10 seconds (the classifier's window)."""
+def identify_sounds(wav_bytes: bytes) -> tuple[list[tuple[str, float]], bool, float]:
+    """Score each 10-second window. Keep each label's strongest score across the clip."""
     start = time.monotonic()
-    x, rate = _samples(wav_bytes)
-    out = classifier()({"raw": x[: rate * 10], "sampling_rate": rate}, top_k=8)
-    labels = [(o["label"], float(o["score"])) for o in out if o["score"] >= min_score][:top] or \
-             [(out[0]["label"], float(out[0]["score"]))]
-    return labels, time.monotonic() - start
+    samples, rate = _samples(wav_bytes)
+    if not samples.size:
+        raise AudioError("The audio file has no samples.")
+    if rate != SOUND_RATE:
+        from scipy.signal import resample_poly
+
+        divisor = math.gcd(rate, SOUND_RATE)
+        samples = resample_poly(samples, SOUND_RATE // divisor, rate // divisor)
+
+    classify = classifier()
+    scores = {}
+    for offset in range(0, len(samples), SOUND_WINDOW):
+        # Shift the final window back to include context for short trailing events.
+        offset = min(offset, max(0, len(samples) - SOUND_WINDOW))
+        window = samples[offset:offset + SOUND_WINDOW]
+        if len(window) < 400:  # AST needs at least one 25 ms analysis frame.
+            window = np.pad(window, (0, 400 - len(window)))
+        for prediction in classify({"raw": window, "sampling_rate": SOUND_RATE}, top_k=8):
+            label = prediction["label"]
+            scores[label] = max(scores.get(label, 0.0), float(prediction["score"]))
+
+    speech = any(scores.get(label, 0.0) >= 0.15 for label in SPEECH_LABELS)
+    strongest = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:3]
+    return [(label, score) for label, score in strongest if score >= 0.05], speech, time.monotonic() - start
 
 
 def transcribe(wav_bytes: bytes) -> tuple[str, float]:
@@ -141,19 +171,18 @@ def transcribe(wav_bytes: bytes) -> tuple[str, float]:
 def answer(data: bytes, filename: str, question: str) -> Answer:
     wav_bytes = to_wav(data, filename)
     length = duration(wav_bytes)
-    sounds, t0 = identify_sounds(wav_bytes)
-    has_speech = any(label in SPEECH_LABELS and score >= 0.15 for label, score in sounds)
+    sounds, has_speech, t0 = identify_sounds(wav_bytes)
     transcript, t1 = transcribe(wav_bytes) if has_speech else ("", 0.0)
-    sound_text = ", ".join(f"{label} ({100 * score:.0f}%)" for label, score in sounds)
+    sound_text = ", ".join(f"{label} ({100 * score:.0f}%)" for label, score in sounds) or "No confident identification"
     evidence = [f"Sounds (audio classifier): {sound_text}",
-                f"Transcript: {transcript or '(no speech)'}", f"Length: {length:.1f} s"]
+                f"Transcript: {transcript or '(no speech detected)'}", f"Length: {length:.1f} s"]
 
     question = question.strip()
     if not question:
-        text = f"Sounds: {sound_text}" + (f"\n\nTranscript: {transcript}" if transcript else "\n\nNo speech in this clip.")
+        text = f"Sounds: {sound_text}" + (f"\n\nTranscript: {transcript}" if transcript else "\n\nNo speech detected.")
         return Answer(text=text, kind=AUDIO, model=llm.GENERAL_MODEL, seconds=t0 + t1, evidence=evidence)
 
-    prompt = (f"Sounds identified: {sound_text}\nTranscript: {transcript or '(no speech in this clip)'}\n\n"
+    prompt = (f"Sounds identified: {sound_text}\nTranscript: {transcript or '(no speech detected)'}\n\n"
               f"Question: {question}")
     # Speech clips go along with the question so the model can also listen for tone and details.
     media = [wav_bytes] if transcript and length <= PIECE_SECONDS else None

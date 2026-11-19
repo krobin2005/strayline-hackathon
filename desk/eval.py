@@ -10,9 +10,9 @@ image/ audio/ text/ video/, and code/tests/<id>_test.py.
 Scoring:
 - code: the pack's own unit tests, run against our generated code in the sandbox (objective).
 - text, unanswerable: correct only if we say the document doesn't contain it.
-- numbers (counts): the first number in the reference must appear in our answer.
-- everything else: normalized string match against the reference, then word overlap. Free-form
-  answers that don't match automatically are marked "review" for a person to check, not counted wrong.
+- counts: match a single unambiguous count; send answers with multiple numbers to human review.
+- free-form answers: match a normalized whole phrase. Partial or ambiguous matches need human review.
+- latency: wall time from loading an item to its final result (including retries and code unit tests).
 
 The answers are used only for scoring, after our answer is final; nothing is looked up.
 Per-item details (which contain pack content) go to data/eval/ (git-ignored, per the pack's rules);
@@ -67,7 +67,7 @@ def run_item(pack: Path, item: dict, answer: dict) -> tuple[str, float, dict]:
 
 
 _RUNNER = '''
-import sys, types
+import ast, sys, types
 sys.path.insert(0, ".")
 solution = open("solution.py").read()
 mod = types.ModuleType("solution")
@@ -75,15 +75,16 @@ exec(compile(solution, "solution.py", "exec"), mod.__dict__)
 sys.modules["solution"] = mod
 ns = {"__name__": "test"}
 ns.update({k: v for k, v in mod.__dict__.items() if not k.startswith("__")})
-exec(compile(open("test_item.py").read(), "test_item.py", "exec"), ns)
-ran = 0
+suite = ast.parse(open("test_item.py").read(), filename="test_item.py")
+exec(compile(suite, "test_item.py", "exec"), ns)
+ran = sum(isinstance(statement, ast.Assert) for statement in suite.body)
 entry = ENTRY_POINT
 if "check" in ns and callable(ns["check"]) and entry and entry in ns:
     ns["check"](ns[entry]); ran += 1
-for name, fn in list(ns.items()):
-    if name.startswith("test") and callable(fn) and name != "test_item":
-        fn(); ran += 1
-print("UNIT TESTS PASSED" if ran or "assert" in open("test_item.py").read() else "NO TESTS FOUND")
+for statement in suite.body:
+    if isinstance(statement, ast.FunctionDef) and statement.name.startswith("test"):
+        ns[statement.name](); ran += 1
+print("UNIT TESTS PASSED" if ran else "NO TESTS FOUND")
 '''
 
 
@@ -94,7 +95,7 @@ def run_unit_tests(solution: str, test_file: Path, entry_point: str | None) -> t
     runner = _RUNNER.replace("ENTRY_POINT", repr(entry_point))
     files = {"solution.py": solution.encode(), "test_item.py": test_file.read_bytes()}
     ok, output = code.run_sandboxed(runner, files)
-    return ok and "UNIT TESTS PASSED" in output, output
+    return ok and output.splitlines()[-1:] == ["UNIT TESTS PASSED"], output
 
 
 # ---------- scoring ----------
@@ -106,9 +107,9 @@ def _norm(s: str) -> str:
 
 
 def _numbers(s: str) -> list[int]:
-    found = [int(n) for n in re.findall(r"\b\d+\b", s)]
-    found += [_NUMBER_WORDS[w] for w in re.findall(r"[a-z]+", s.lower()) if w in _NUMBER_WORDS]
-    return found
+    return [int(token) if token.isdecimal() else _NUMBER_WORDS[token]
+            for token in re.findall(r"\b(?:[0-9]+|[a-z]+)\b", s.lower())
+            if token.isdecimal() or token in _NUMBER_WORDS]
 
 
 def _final_answer(text: str) -> str:
@@ -140,35 +141,39 @@ def score(item: dict, answer: dict, ours: str, extra: dict) -> str:
     if transcript and re.search(r"transcri|what (is|was) (said|being said)|exact words", question, re.I):
         return "correct" if word_error_rate(transcript, ours) <= 0.25 else "review"
 
-    # Counting questions: the reference's count must be the count we give.
-    ref_numbers = _numbers(reference)
-    if re.match(r"\s*how many\b", question, re.I) and ref_numbers:
-        ours_numbers = _numbers(final)
-        if not ours_numbers:
-            return "review"
-        # "...5 appear, 2 disappear, so 3 are left": when the question asks what's left, the last number counts.
-        asks_end = re.search(r"\b(left|remain|at the end|end up)\b", question, re.I)
-        target = ref_numbers[-1] if asks_end else ref_numbers[0]
-        return "correct" if target in ours_numbers[:2] else "wrong"
-    ref_head = re.split(r"[.(;]", reference, maxsplit=1)[0]
+    # Page citations and evidence describe provenance, not the answer itself.
+    final = re.sub(r"\(p(?:age)?\.?\s*\d+\)", "", final, flags=re.I)
+    ref_head = re.split(r"[;(]|[.](?:\s|$)", reference, maxsplit=1)[0].strip()
     head_numbers = _numbers(ref_head)
-    if head_numbers and len(ref_head.split()) <= 3:
-        return "correct" if head_numbers[0] in _numbers(final) else "wrong"
+    count_question = re.match(r"\s*how many\b", question, re.I)
+    if head_numbers and (count_question or ref_head.isdecimal() or ref_head.lower() in _NUMBER_WORDS):
+        ref_counts, ours_counts = set(head_numbers), set(_numbers(final))
+        if not ours_counts or len(ref_counts) != 1 or len(ours_counts) != 1:
+            return "review"
+        if re.search(r"-\d|\d[./:]\d|\b(?:not|or|maybe)\b", final, re.I):
+            return "review"
+        return "correct" if ref_counts == ours_counts else "wrong"
 
     ref, got = _norm(reference), _norm(final)
-    if ref and ref in got:
+    if ref and ref == got:
         return "correct"
-    ref_words = set(ref.split())
-    overlap = len(ref_words & set(got.split())) / len(ref_words) if ref_words else 0
-    if overlap >= 0.6 or (len(ref_words) <= 2 and overlap >= 0.5):
+    # A substring in a longer word, a negation, or a bag of shared words is not proof.
+    if ref and f" {ref} " in f" {got} " and not re.search(r"\b(?:not|no|never|without)\b|n't\b", got):
         return "correct"
-    return "review" if len(ref_words) >= 3 else "wrong"
+    # Nonmatching free-form descriptions may be synonyms; don't claim a machine verdict.
+    return "review"
+
 
 
 def word_error_rate(reference: str, hypothesis: str) -> float:
-    r, h = _norm(reference).split(), _norm(hypothesis.replace("Transcript:", "")).split()
+    # Preserve every word: dropped articles and pronouns are errors in a transcription.
+    def words(text):
+        return re.findall(r"[\w]+(?:'[\w]+)*", text.lower().replace("’", "'"))
+
+    r = words(reference)
+    h = words(re.sub(r"^\s*transcript:\s*", "", hypothesis, flags=re.I))
     if not r:
-        return 0.0
+        return float(len(h))
     prev = list(range(len(h) + 1))
     for i, rw in enumerate(r, 1):
         cur = [i] + [0] * len(h)
@@ -227,7 +232,7 @@ def rescore(pack: Path, items: list[dict], answers: dict, runs: list[Path], summ
         verdict = score(by_id[item_id], answers.get(item_id, {}), str(d["ours"]), d)
         rows.append({"id": item_id, "modality": d["modality"], "score": verdict, "seconds": d["seconds"]})
     write_summary(rows, pack, summary)
-    print(open(summary).read())
+    print(summary.read_text())
 
 
 def main():
@@ -268,11 +273,13 @@ def main():
     with detail_path.open("w") as details:
         for n, item in enumerate(items, 1):
             ans = answers.get(item["id"], {})
+            item_start = time.monotonic()
             try:
-                ours, seconds, extra = run_item(pack, item, ans)
+                ours, _, extra = run_item(pack, item, ans)
                 verdict = score(item, ans, ours, extra)
             except Exception as e:  # keep going; an error counts as wrong
-                ours, seconds, extra, verdict = f"ERROR: {e}", 0.0, {}, "wrong"
+                ours, extra, verdict = f"ERROR: {e}", {}, "wrong"
+            seconds = time.monotonic() - item_start
             rows.append({"id": item["id"], "modality": item["modality"], "score": verdict, "seconds": seconds})
             details.write(json.dumps({**rows[-1], "question": item.get("question"), "ours": ours,
                                       "reference": ans.get("reference_answer"), **extra}) + "\n")

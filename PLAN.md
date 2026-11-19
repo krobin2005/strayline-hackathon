@@ -63,7 +63,7 @@ Source: the kickoff slides and problem-statement email from Vedanshi Shah, Nov 1
 Why this beats a generic assistant:
 - **Impact (15%):** a specific user (small-college IT security), a specific problem (sensitive data that can't go to cloud AI), and a natural reason to be local.
 - **Architecture (20%):** the Strayline detector is real ML we can explain. Very few teams will have something like it.
-- **Evidence it helps:** Kyle has a contact in Bates ILS (IT services). A 15-minute feedback session on Thursday afternoon gives us real quotes. Their correspondence stays out of the repo.
+- **Evidence it helps:** Time a teammate completing the sample case and report the result as an internal rehearsal.
 
 **Scope cut from the README spec:** the autoencoder, daily thresholds, the 10-seed catchability map, the investigator agent, the triage ablation and the 2018 cross-network test are all **out**. The detector keeps the classifier + kNN, the joint-OR threshold, incident grouping, volume ranking and one chart per incident (README §4, §5A–B, §6, §7). The README needs a matching rewrite (§0, §1, §2, §8–9).
 
@@ -104,7 +104,7 @@ Router (plain code, by file type, not an LLM)
 - [ ] Speed up video (~65 s now): fewer or tiled frames; prefer specific sound labels ("Helicopter" over "Vehicle")
 - [ ] Tune the log-briefing prompt (it over-flags normal incidents)
 - [ ] Try the app from a phone; demo inputs (phishing screenshots, runbook, voicemails, screen recordings)
-- [ ] User feedback session, slides, rehearsal; move history to the IEEE org repo before Thu EOD
+- [ ] Internal timed case, slides, rehearsal; move history to the IEEE org repo before Thu EOD
 
 ---|---|---|---|
 | Image, video frames, charts | **Qwen3-VL 8B** (organizers' pick) | qwen2.5vl:7b (already installed) | Strong OCR and counting |
@@ -141,7 +141,7 @@ Per the README: one laptop, everyone on every task, with P1/P2/P3 as a shared ch
 |---|---|---|
 | 2:30–4:00 | Pull qwen3-vl, qwen2.5-coder, gemma4; install Whisper. **Spike the risky item:** can anything local identify a sound? | Download the practice pack; write the user one-liner |
 | 4:00–7:00 | App skeleton: FastAPI + one chat page with upload and mic; router; **image** and **text** answers end to end | Write the runbook document (5–8 pages, ours); collect phishing screenshots (public examples or our own mocks) |
-| 7:00–11:00 | **Audio** (Whisper + sound ID), **video** (frames → vision model), **code** (generate → run in sandbox → show result) | Record voicemails and screen recordings; draft the interview questions; email the ILS contact for a Thursday slot |
+| 7:00–11:00 | **Audio** (Whisper + sound ID), **video** (frames → vision model), **code** (generate → run in sandbox → show result) | Record voicemails and screen recordings; prepare the internal rehearsal case |
 | 11:00 | **Gate 1:** every one of the five inputs answers one practice item **in the app** | |
 
 *Cut if behind at Gate 1:* "identify sounds" moves to the transcript only, and we say so (a named limit), with the code sandbox showing output only. Never cut a whole modality.
@@ -151,8 +151,8 @@ Per the README: one laptop, everyone on every task, with P1/P2/P3 as a shared ch
 | Time | Build | Inputs / Story |
 |---|---|---|
 | 9:00–12:00 | **Test harness:** run the whole practice pack + our security set, score each item, write `results/test_results.md` (accuracy and seconds per item, per modality) | Slides: user, problem, architecture, model choices, limits |
-| 12:00–3:00 | **Strayline detector (lite):** features → classifier + kNN → joint-OR thresholds → incidents → top list + charts, wired into the chat | **User feedback session** with ILS (15 min): try the app, note quotes |
-| 3:00–4:30 | Usability pass: loading states, errors, "not in the document" message, mobile layout; check it works with Wi-Fi off | Fold quotes and test results into the slides |
+| 12:00–3:00 | **Strayline detector (lite):** features → classifier + kNN → joint-OR thresholds → incidents → top list + charts, wired into the chat | **Internal timed case**: record task completion and errors |
+| 3:00–4:30 | Usability pass: loading states, errors, "not in the document" message, mobile layout; check it works with Wi-Fi off | Add rehearsal observations and test results to the slides |
 | 4:30–5:00 | Presentation prep (scheduled by organizers) | |
 | 5:00–9:00 | Bug fixes only. README install/run steps from a clean clone. Move the history to the **IEEE org repo**. Rerun the harness for final numbers | Rehearse the 5-minute pitch twice |
 | **9:00 pm** | **Gate 2, code freeze.** Push, tag `final`. Deadline is EOD | |
@@ -176,10 +176,10 @@ Two judges give one score each, so the pitch has to show all five inputs fast.
 
 | Time | Beat |
 |---|---|
-| 0:00–0:40 | **User and problem.** "A small college's security team is a handful of people defending a whole campus [use real numbers from the ILS interview]. Their evidence (logs, screenshots, voicemails) holds private data, so cloud AI is off the table." |
+| 0:00–0:40 | **User and problem.** "A small college's security team is a handful of people defending a whole campus. Their evidence (logs, screenshots, voicemails) holds private data, so cloud AI is off the table." |
 | 0:40–3:40 | **Live, Wi-Fi off, phone in hand.** About 30 s per input: phishing screenshot → verdict; scam voicemail → transcript + "they want gift cards" + "office noise in background"; runbook question → answer with the page, then a question the runbook can't answer → "not in the document"; "write a port-scan finder" → code runs on the log → hosts listed; screen recording → step-by-step description |
-| 3:40–4:20 | **Strayline detector:** one day of traffic → top incident → its chart → ask "what is this host doing?" |
-| 4:20–5:00 | **Proof.** Test-results table (per-modality accuracy, seconds per item), hardware, one user quote |
+| 3:40–4:20 | **Strayline detector:** one day of traffic → top incident → its supporting counts → ask "what is this host doing?" |
+| 4:20–5:00 | **Proof.** Test-results table (per-modality accuracy, seconds per item), hardware, one timed team rehearsal |
 
 **15-minute final:** the same demo slower, then architecture and model choices, test results in detail, named limits, impact evidence, and questions.
 

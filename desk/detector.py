@@ -66,9 +66,9 @@ def load(path: Path) -> pd.DataFrame:
     df["ts"] = (ts - pd.Timestamp("1970-01-01")) / pd.Timedelta(seconds=1)
     df = df.dropna(subset=["ts"]).reset_index(drop=True)
     if "label" in df:
-        df = df[~df["label"].astype(str).str.contains("Attempted|Heartbleed", case=False)].reset_index(drop=True)
-        df["family"] = df["label"].map(_family)
-        df = df[df["family"].notna()].reset_index(drop=True)
+        # Unknown or excluded lab labels are unscored. Keep their traffic for inference.
+        families = {label: _family(label) for label in df["label"].dropna().unique()}
+        df["family"] = df["label"].map(families)
     span_h = (df["ts"].max() - df["ts"].min()) / 3600
     assert span_h < 30, f"{path.name}: timestamps span {span_h:.1f} h; expected about one day"
     return add_features(df)
@@ -76,6 +76,8 @@ def load(path: Path) -> pd.DataFrame:
 
 def _family(label: str) -> str | None:
     label = str(label)
+    if "attempted" in label.lower() or "heartbleed" in label.lower():
+        return None
     if label.upper() == "BENIGN":
         return "Benign"
     if "portscan" in label.lower():  # incl. "Infiltration - Portscan", a scan from a compromised host
@@ -255,6 +257,7 @@ class Report:
     false_alarm_rate: float | None = None      # only if the file has labels
     attack_alert_rate: float | None = None
     attack_incidents_in_top: int | None = None
+    incidents_total: int = 0
 
 
 def analyse(path: Path, det: Detector, top: int = 20) -> Report:
@@ -285,22 +288,25 @@ def analyse(path: Path, det: Detector, top: int = 20) -> Report:
                 "distinct_targets": int(inc["dst"].nunique()),
                 "distinct_ports": int(inc["dst_port"].nunique()),
                 "top_ports": [int(p) for p in inc["dst_port"].value_counts().index[:5]],
+                "classifier_flags": int(inc["by_clf"].sum()),
+                "anomaly_flags": int(inc["by_knn"].sum()),
                 "fired_by": f"classifier {100 * inc['by_clf'].mean():.0f}%, anomaly {100 * inc['by_knn'].mean():.0f}%",
                 "unusual": ", ".join(f"{ALL_FEATURES[i]} {np.median(inc[ALL_FEATURES[i]]):.3g}" for i in unusual),
             }
             if "family" in inc:  # ground truth for scoring only; stripped before any LLM sees the card
-                card["_truth"] = inc["family"].mode().iat[0]
+                mode = inc["family"].mode()
+                card["_truth"] = mode.iat[0] if not mode.empty else None
             incidents.append(card)
     incidents.sort(key=lambda c: -c["alerts"])
 
     report = Report(connections=len(df), alerts=int(df["alert"].sum()), incidents=incidents[:top],
-                    seconds=time.monotonic() - t0)
+                    incidents_total=len(incidents), seconds=time.monotonic() - t0)
     if "family" in df:
         benign = df["family"] == "Benign"
-        report.false_alarm_rate = float(df.loc[benign, "alert"].mean())
-        report.attack_alert_rate = float(df.loc[~benign, "alert"].mean()) if (~benign).any() else None
+        attack = df["family"].notna() & ~benign
+        report.false_alarm_rate = float(df.loc[benign, "alert"].mean()) if benign.any() else None
+        report.attack_alert_rate = float(df.loc[attack, "alert"].mean()) if attack.any() else None
         report.attack_incidents_in_top = sum(c.get("_truth") not in (None, "Benign") for c in incidents[:top])
-    report.incidents_total = len(incidents)
     return report
 
 
@@ -319,9 +325,11 @@ def main():
         print(f"{r.connections:,} connections -> {r.alerts:,} alerts -> {r.incidents_total} incidents "
               f"({r.seconds:.0f}s)")
         if r.false_alarm_rate is not None:
-            print(f"false alarms on normal traffic: {100 * r.false_alarm_rate:.2f}%   "
-                  f"attack connections alerted: {100 * (r.attack_alert_rate or 0):.1f}%   "
-                  f"attack incidents in top {len(r.incidents)}: {r.attack_incidents_in_top}")
+            print(f"false alarms on known normal traffic: {100 * r.false_alarm_rate:.2f}%")
+        if r.attack_alert_rate is not None:
+            print(f"known attack connections alerted: {100 * r.attack_alert_rate:.1f}%")
+        if r.attack_incidents_in_top is not None:
+            print(f"majority-attack incidents in top {len(r.incidents)}: {r.attack_incidents_in_top}")
         for c in r.incidents[:10]:
             print(json.dumps(c))
     else:

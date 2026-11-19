@@ -40,9 +40,7 @@ Each item lists roughly how long it takes and what "done" looks like. Work top t
    - 1 screen recording of a fake "tech support" pop-up (we make it).
    - Put them in `demo/` only if they contain no private data; otherwise keep them local.
 
-6. **User feedback session.** (30 min)
-   - 15 minutes with someone from Bates ILS (IT security): they try the app, and we write down what they say.
-   - Done when: we have 2–3 real quotes and one number (e.g. "how long does triaging a phishing report take today?").
+6. **Time a team rehearsal.** One teammate plays the analyst with the [sample case](demo/README.md); another records completion time, evidence used, and any wrong answers. Identify this as an internal exercise on the impact slide.
 
 7. **Phone test.** (15 min)
    - Start the app, open the printed phone address on a phone on the same Wi-Fi or hotspot, and try an image and a document.
@@ -70,7 +68,7 @@ Each item lists roughly how long it takes and what "done" looks like. Work top t
     - hardware (M4 Pro, 24 GB)
     - test results table
     - limits
-    - one user quote
+    - one measured outcome from the team rehearsal, labeled as such
 
 12. **Rehearse the 5-minute pitch twice with Wi-Fi off.** Show all five inputs in about 3 minutes. The script is in PLAN.md §6.
 

@@ -11,3 +11,4 @@ class Answer:
     seconds: float
     # What the answer was based on, shown under it in the app (passages, transcript, frames...).
     evidence: list[str] = field(default_factory=list)
+    frame_sheet_jpeg: str | None = None

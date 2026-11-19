@@ -5,20 +5,15 @@ Flow: Gemma 4 E4B writes the code plus a small self-test → we run it in a sepa
 once for a fix → the user sees the code, the output and whether its tests passed.
 """
 
-import os
 import re
-import shutil
-import subprocess
-import sys
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from .. import llm
+from ..sandbox import TIMEOUT_SECONDS, run_sandboxed
 from . import Answer
 
 KIND = "code"
-TIMEOUT_SECONDS = 10
 PASS_MARKER = "ALL TESTS PASSED"
 
 _CODE_REQUEST = re.compile(
@@ -39,10 +34,6 @@ SYSTEM = (
     "Think about edge cases before writing. Do not read or write files unless asked; never use the network."
 )
 
-# macOS sandbox profile: allow normal execution but deny all network access.
-_SANDBOX_PROFILE = "(version 1)(allow default)(deny network*)"
-
-
 def is_code_request(question: str) -> bool:
     question = question or ""
     return bool(_CODE_REQUEST.search(question) or _CODE_STUB.search(question))
@@ -51,28 +42,6 @@ def is_code_request(question: str) -> bool:
 def _extract_code(reply: str) -> str:
     blocks = re.findall(r"```(?:python|py)?\s*\n(.*?)```", reply, re.DOTALL)
     return max(blocks, key=len).strip() if blocks else reply.strip()
-
-
-def run_sandboxed(code: str, files: dict[str, bytes] | None = None) -> tuple[bool, str]:
-    """Run code in a throwaway folder. Returns (finished without error, combined output)."""
-    with tempfile.TemporaryDirectory(prefix="desk-run-") as tmp:
-        script = Path(tmp) / "main.py"
-        script.write_text(code)
-        for name, data in (files or {}).items():
-            (Path(tmp) / Path(name).name).write_bytes(data)
-        command = [sys.executable, "-I", str(script)]
-        if shutil.which("sandbox-exec"):
-            command = ["sandbox-exec", "-p", _SANDBOX_PROFILE] + command
-        env = {"PATH": "/usr/bin:/bin", "HOME": tmp, "PYTHONDONTWRITEBYTECODE": "1"}
-        try:
-            result = subprocess.run(command, cwd=tmp, env=env, capture_output=True, text=True,
-                                    timeout=TIMEOUT_SECONDS)
-        except subprocess.TimeoutExpired:
-            return False, f"Stopped after {TIMEOUT_SECONDS} seconds (possible infinite loop)."
-        output = (result.stdout + ("\n" + result.stderr if result.stderr.strip() else "")).strip()
-        # Hide the temp folder path from tracebacks.
-        output = output.replace(tmp + os.sep, "").replace(tmp, ".")
-        return result.returncode == 0, output[-4000:]
 
 
 @dataclass

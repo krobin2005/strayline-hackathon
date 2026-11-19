@@ -71,7 +71,7 @@ The detector works like two security guards:
 1. **Guard 1 ("seen it before")** learned what known attacks look like from example data.
 2. **Guard 2 ("that's weird")** learned what *normal* traffic looks like and flags anything far from normal. This catches attacks nobody has seen before.
 
-If either guard raises a hand, the connection is flagged. The guards are tuned so they only bother you about **2% of normal traffic**. The flags are then grouped by which computer did them, so 170,000 flags become **32 incidents**, sorted biggest first. The AI then writes a short briefing: "look at #1 first, here's why."
+If either guard raises a hand, the connection is flagged. The guards are tuned so they only bother you about **2% of normal traffic**. The flags are then grouped by which computer did them, so 170,000 flags become **33 incidents**, sorted biggest first. The AI then writes a short briefing: "look at #1 first, here's why."
 
 **Test:** on a day of traffic the detector had never seen, which included a kind of attack it was never trained on, the attack came out as **incident #1**.
 
@@ -104,7 +104,7 @@ The organizers gave us 100 practice questions in the same format the judges will
 | All five inputs working + our own test results | 30% | ✅ all five work, and we have a 100-item test |
 | A real app that works live and is easy to use | 25% | ✅ one simple chat page, works on a phone too |
 | Explaining our models and their limits | 20% | ✅ we tested several models and can say why we picked these |
-| A specific user with a real problem | 15% | ✅ college IT security; still need a real quote from them |
+| A specific user with a real problem | 15% | ✅ college IT security; team rehearsal planned; external validation remains open |
 | Answering judges' questions | 10% | practice! |
 
 ---

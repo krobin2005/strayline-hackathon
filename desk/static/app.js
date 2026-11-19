@@ -9,6 +9,9 @@ const chip = document.getElementById("chip");
 const statusEl = document.getElementById("status");
 
 // The file currently attached. It stays attached for follow-up questions until removed.
+let uploadVersion = 0;
+let uploading = false;
+let answering = false;
 let attachment = null; // {id, kind, name, previewUrl}
 
 const KIND_LABEL = { image: "Image", document: "Document", audio: "Audio", video: "Video", logs: "Logs" };
@@ -17,7 +20,7 @@ async function checkHealth() {
   try {
     const r = await fetch("/api/health");
     const h = await r.json();
-    statusEl.textContent = h.ollama ? "Local models ready" : "Ollama not running";
+    statusEl.textContent = h.ollama ? "Ollama connected" : "Ollama not running";
     statusEl.className = "status " + (h.ollama ? "ok" : "bad");
   } catch {
     statusEl.textContent = "Server offline";
@@ -114,6 +117,14 @@ function fillAnswer(el, result) {
       ? `Based on ${result.evidence.length} passage${result.evidence.length > 1 ? "s" : ""}`
       : "How I got this";
     d.appendChild(s);
+    if (result.frame_sheet_jpeg) {
+      s.textContent = "View the frames used for this answer";
+      const sheet = document.createElement("img");
+      sheet.className = "frame-sheet";
+      sheet.alt = "Video frames in chronological order, read left to right by row";
+      sheet.src = "data:image/jpeg;base64," + result.frame_sheet_jpeg;
+      d.appendChild(sheet);
+    }
     for (const e of result.evidence) {
       const p = document.createElement("p");
       p.textContent = e;
@@ -136,6 +147,9 @@ function showChip() {
 }
 
 document.getElementById("chip-clear").addEventListener("click", () => {
+  uploadVersion++;
+  uploading = false;
+  sendButton.disabled = answering;
   attachment = null;
   showChip();
   input.focus();
@@ -146,7 +160,13 @@ document.getElementById("chip-clear").addEventListener("click", () => {
 // the server converts it.
 async function toWav(blob, name) {
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
-  const decoded = await new AudioCtx().decodeAudioData(await blob.arrayBuffer());
+  const ctx = new AudioCtx();
+  let decoded;
+  try {
+    decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+  } finally {
+    await ctx.close();
+  }
   const rate = 16000;
   const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * rate), rate);
   const src = offline.createBufferSource();
@@ -166,6 +186,10 @@ async function toWav(blob, name) {
 }
 
 async function uploadFile(file) {
+  const version = ++uploadVersion;
+  attachment = null;
+  uploading = true;
+  sendButton.disabled = true;
   chip.hidden = false;
   document.getElementById("chip-kind").textContent = "Uploading";
   document.getElementById("chip-name").textContent = file.name;
@@ -177,17 +201,24 @@ async function uploadFile(file) {
   try {
     const r = await fetch("/api/upload", { method: "POST", body });
     const data = await r.json();
+    if (version !== uploadVersion) return;
     if (!r.ok) throw new Error(data.detail || "Upload failed");
     attachment = { ...data, previewUrl: data.kind === "image" ? URL.createObjectURL(file) : null };
     showChip();
     input.focus();
   } catch (err) {
+    if (version !== uploadVersion) return;
     attachment = null;
     chip.hidden = true;
     hideWelcome();
     const el = document.createElement("div");
     log.appendChild(el);
     fillError(el, err.message);
+  } finally {
+    if (version === uploadVersion) {
+      uploading = false;
+      sendButton.disabled = answering;
+    }
   }
 }
 
@@ -252,7 +283,8 @@ form.addEventListener("submit", async (event) => {
     pending.stop();
     fillError(pending.el, "Lost contact with the Strayline Desk server.");
   } finally {
-    sendButton.disabled = false;
+    answering = false;
+    sendButton.disabled = uploading;
     scrollDown();
     input.focus();
   }

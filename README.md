@@ -6,7 +6,7 @@ Strayline Desk runs on one laptop with open-weight models and no internet connec
 
 Built for the **IEEE AI Hackathon 2026: Multimodal LLM Challenge** (Roux Institute, Portland ME, Nov 18–20, 2026). The schedule, gates and demo scripts are in **[PLAN.md](PLAN.md)**.
 
-> **Status:** design spec. No code yet. Sections marked *(to fill)* get real numbers from our own test runs.
+Start with the [five-input rehearsal](demo/README.md), the [recorded practice results](results/test_results.md), and the install instructions in section 8.
 
 ## How we work
 
@@ -16,9 +16,9 @@ We design, build, test, and rehearse together on one laptop at a time. Everyone 
 
 ## 1. The user and the problem
 
-**User:** the IT security staff of a small college: a handful of people defending thousands of students and staff. *(Real numbers and quotes from our user session go here.)*
+**User:** the IT security staff of a small college: a handful of people defending thousands of students and staff.
 
-**Problem:** their evidence is sensitive. Logs show who visited what, voicemails and screenshots contain names and accounts, and incident notes describe real people. Pasting any of it into a cloud AI tool sends student and staff data to a third party, so in practice they can't use AI at all. They also handle every kind of input, not just text.
+**Problem:** their evidence is sensitive. Logs show who visited what, voicemails and screenshots contain names and accounts, and incident notes describe real people. Pasting any of it into a cloud AI tool sends student and staff data to a third party, so they need a way to analyze it locally. They also handle every kind of input, not just text.
 
 **What Strayline Desk does:** one chat, five kinds of input plus network logs, all answered by local open-weight models. It works offline, costs nothing per request, and can't change its terms or disappear.
 
@@ -44,37 +44,35 @@ FastAPI server on the laptop
 Router (plain code, by file type and request, never an LLM)
    ├─ image            → vision-language model ──────────────────────────────┐
    ├─ video            → sample frames (OpenCV) → vision-language model       │
-   ├─ audio            → Whisper transcript + sound identification → LLM      │
+   ├─ audio            → Gemma transcript + AudioSet sound labels → LLM      │
    ├─ document         → chunk + retrieve → LLM, with a "not found" check     ├→ answer
    ├─ code request     → coder model → run in a sandbox → show code + output  │   + evidence
-   └─ connection logs  → Strayline detector → incidents + charts → LLM        ┘
+   └─ connection logs  → Strayline detector → ranked incident cards → LLM        ┘
 ```
 
 Design rules:
 - **Fully local.** Ollama serves every model on `localhost`. No cloud AI SDKs are installed, and the app is tested with Wi-Fi off.
 - **Plain-code routing.** File type decides the path, which is fast, predictable and easy to explain.
-- **Show the evidence.** Every answer shows what it was based on: the transcript, the frames, the document passage, the code's output, or the incident's chart.
-- **One model in memory at a time** where possible (24 GB RAM). Model choice is per job (§3).
+- **Show the evidence.** Every answer shows what it was based on: the transcript, the frames, the document passage, the code's output, or the detector counts.
+- **Local models** are preloaded on the 24 GB demo laptop. Model choice is per job (§3).
 
 ---
 
 ## 3. Models and why
 
-All open-weight and served by Ollama. **Two models cover all five inputs**, so only two ever need to be in memory (24 GB). Final picks are confirmed by the practice-pack benchmark (§6).
+Ollama serves the language and vision models on the laptop. The sound classifier runs in a separate local Python pipeline.
 
-| Job | Model | Why | Backup |
-|---|---|---|---|
-| Images, video frames, incident charts | **Qwen3-VL 8B** (`qwen3-vl:8b`) | Recommended by organizers. First test: counted 6 markers and read button text exactly; 2.3 s warm, 22 s cold | `qwen2.5vl:7b` |
-| Code | **Gemma 4 E4B** (`gemma4:e4b-it-q4_K_M`) | First test (per-minute port-scan finder, run against unit tests): **passed 2/2** in ~14 s | none tested yet |
-| Speech to text, audio questions | **Gemma 4 E4B** | Takes audio directly (WAV through Ollama's `images` field). First test: perfect transcript of a fake help-desk voicemail, 7 s | Whisper (`faster-whisper`, `small`) |
-| Identifying sounds | **Gemma 4 E4B** | Works only with a "this is a sound, not speech" prompt and clips stretched past ~3 s by looping. First test: macOS chimes → "musical chime", "ringing bell". **Still to test on real sounds** | YAMNet/CLAP classifier, or a named limit |
-| Document QA, general text | **Gemma 4 E4B** (to confirm) | Avoids the Qwen3-VL text-only problem below | `gemma3:12b` |
+| Job | Model | Why |
+|---|---|---|
+| Image questions | Qwen3-VL 8B | Reads screenshots and answers visual questions with one image per request. |
+| Documents, code, briefings and speech | Gemma 4 E4B | Handles text and WAV input locally. The code path runs generated functions against tests. |
+| Environmental sound identification | MIT Audio Spectrogram Transformer, fine-tuned on AudioSet | Provides ranked sound labels and scores independently of the transcript. |
 
 **Rejected on first test:**
 - **Qwen2.5-Coder 7B** (organizers' code pick): failed the port-scan task 2/2. Its fix after seeing the failing test was worse.
 - **Qwen3-VL 8B for text-only prompts:** returned an empty answer after ~100 s on the code task, apparently spending the whole reply on hidden reasoning even with `think: false`. Fine on image prompts.
 
-**Hardware:** MacBook Pro, Apple M4 Pro, 24 GB RAM, Ollama 0.40.16. *(Seconds per item from §6 go here.)*
+**Hardware:** MacBook Pro, Apple M4 Pro, 24 GB RAM, Ollama 0.40.16.
 
 ---
 
@@ -85,15 +83,14 @@ All open-weight and served by Ollama. **Two models cover all five inputs**, so o
 - Phishing check prompt: sender, link text vs real URL, urgency, requests for credentials or money, branding mismatches. The answer is a verdict with reasons.
 
 ### Audio
-All three steps use Gemma 4 E4B, which takes WAV audio directly.
-1. **Transcribe** in ~25-second pieces (Gemma handles short clips best). No speech → "no speech".
-2. **Identify sounds** from the first piece with a prompt listing everyday sound types; clips under 3 s are looped so the model has enough to hear. If the model claims it heard nothing, it retries once with a shorter prompt, then reports "couldn't identify".
-3. **Answer the question** from the transcript and sound list (plus the clip itself when it has speech), pointing out requests for passwords, codes or payment.
+1. The AudioSet classifier scans ten-second windows across the recording. The evidence panel shows its strongest supported sound labels.
+2. When the classifier detects speech, Gemma transcribes the recording in 25-second chunks. A missed speech detection can leave the transcript empty.
+3. Gemma answers using the transcript and the sound evidence. For short speech clips it also receives the audio.
 - The page converts mic recordings, MP3 and M4A to 16 kHz WAV in the browser; the server falls back to macOS `afconvert`.
 
 ### Text (documents)
-1. Accept PDF, TXT and Markdown. Split into ~500-word chunks with page numbers.
-2. Retrieve the most relevant chunks for the question (local embeddings from Ollama, or BM25 if embeddings are slow).
+1. Accept PDF, TXT and Markdown. Split into 180-word overlapping chunks with page numbers.
+2. Retrieve the most relevant chunks for the question with BM25.
 3. Answer **only from those chunks**, quoting the page.
 4. **"Not in the document":** the prompt requires an exact `NOT_FOUND` reply when the chunks don't contain the answer, and the app shows "This isn't in the document." We test this explicitly: the practice pack has questions with no answer.
 
@@ -139,7 +136,7 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 
 **Incidents:** group alerts per source host, split at gaps over 10 minutes, keep groups of ≥ 10 alerts. Rank by alert count; show the top 20.
 
-**In the chat:** each incident has a card (pseudonymized hosts, duration, rate, hosts and ports touched, which detector fired, top unusual features) and a chart (alerts over time, ports × hosts touched). The user can ask "what is this host doing?" and the vision model reads the card + chart.
+**In the chat:** each incident has a card with a pseudonymized source, duration, rate, hosts and ports touched, and detector signals. The language model uses those cards for its briefing.
 
 **Mistakes to avoid** (from earlier research): timestamps in µs divided as if ns (assert a day spans ~24 h); different feature code for training vs serving; per-host counts computed after sampling.
 
@@ -148,7 +145,7 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 ## 5. App
 
 - **FastAPI** server + one HTML/JS page, all assets local (no CDNs), so it works with no internet.
-- **One chat** with: text box, file upload (any of the five types or a log), mic button, and an "Incidents" tab for logs.
+- **One chat** with: text box, file upload (any of the five types or a log), mic button, and an incident table in log replies.
 - **Mobile:** the server listens on the local network; a phone on the same hotspot opens the same page (judging bonus for web + mobile). The layout works at phone width.
 - **Usability:** a progress message while a model runs ("transcribing… 6 s"), clear errors, and the evidence for every answer.
 
@@ -157,7 +154,7 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 ## 6. Testing ("your own test results")
 
 - **Practice pack** (not scored by the organizers): 25 image, 20 audio, 20 text, 20 code, 15 video items in the same format as the Day 3 items, which judges pick at random and answer live with Wi-Fi off. Kaggle: `bhavyasreepylaa/ieee-ai-hackathon-2026-practice-pack` (needs a Kaggle login). **Its rules: never commit the pack or its answers; no fine-tuning; never look up answers in the source datasets' labels.**
-- **Our security set:** phishing screenshots, voicemails we recorded ourselves, our own runbook document, screen recordings we made, and one CIC-IDS2017 day.
+- **Our security set:** a fictional account-recovery case with a locally synthesized voicemail, a notice, a runbook, and a short clip; plus one CIC-IDS2017 day.
 - **Harness:** `python -m desk.eval` runs every item through the same handlers as the app and writes `results/test_results.md` (aggregates only). Scoring: code by the pack's own unit tests in the sandbox; unanswerable text questions must say "not in the document"; counts by the number; transcripts by word error rate (≤ 25%); short answers by normalized match; long free-form answers marked "needs review" for a person instead of guessed. Checked on a synthetic stand-in pack: 10/11 (the miss was a pure test tone, see Limits).
 - **Detector:** share of attack connections alerted and the false-alarm rate on the demo day's benign traffic.
 
@@ -229,7 +226,7 @@ CIC-IDS2017 improved, 328 MB zip, git-ignored. After unzipping, train once (~15 
 ```
 In the app, attach `data/raw/wednesday.csv` (291 MB) and ask "Which incidents should I look at first?".
 
-First result (Wednesday, never seen in training): 490,754 connections → 170,194 alerts → 32 incidents in 26 s; 0.44% of normal connections alerted (budget 2%); 98.3% of DoS connections alerted; the DoS flood is incident #1. The classifier, trained without any DoS, caught 97% of it by generalizing from DDoS; the anomaly score caught the rest.
+First result (Wednesday, never seen in training): 496,641 connections → 170,927 alerts → 33 incidents in 26 s; 0.44% of normal connections alerted (budget 2%); 98.3% of labeled attack connections alerted; the DoS flood is incident #1. These are results from public lab traffic. The briefing uses pseudonymized incident cards.
 
 Download:
 ```bash
@@ -245,7 +242,7 @@ cd data/raw && unzip CICIDS2017_improved.zip
 
 | Rule | How |
 |---|---|
-| Open-weight models only, running locally | Ollama + Whisper on the laptop; no cloud AI anywhere; tested offline |
+| Open-weight models only, running locally | Ollama + a cached AudioSet classifier on the laptop; no cloud AI anywhere; tested offline |
 | AI coding tools for writing code, not as the system's brain | We used AI assistants to help write code; the app's answers come only from the local models |
 | All code written during the event | This repo's history starts Nov 18, 2026. The detector design comes from Kyle's earlier Strayline research; no code, models or files were copied from it |
 | No hard-coded answers | Every answer in the demo is produced live; the harness runs the same code path |

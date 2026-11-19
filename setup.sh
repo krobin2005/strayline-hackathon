@@ -28,6 +28,9 @@ say "Creating .venv and installing packages"
 .venv/bin/pip install -q -r requirements.txt
 echo "packages ok"
 
+say "Installing the local Python sandbox"
+.venv/bin/python -m desk.setup_sandbox
+
 say "Checking Ollama"
 OLLAMA="$(command -v ollama || true)"
 [ -z "$OLLAMA" ] && [ -x /Applications/Ollama.app/Contents/Resources/ollama ] && OLLAMA=/Applications/Ollama.app/Contents/Resources/ollama
@@ -48,7 +51,7 @@ say "Downloading the two models (about 13 GB the first time; skipped if already 
 "$OLLAMA" pull "$GENERAL_MODEL"
 
 say "Downloading the sound classifier (~350 MB, once)"
-.venv/bin/python -c "from desk.handlers import audio; audio.classifier(); print('sound classifier ok')"
+.venv/bin/python -c "from desk.handlers import audio; from huggingface_hub import snapshot_download; snapshot_download(audio.SOUND_MODEL, allow_patterns=["config.json", "preprocessor_config.json", "model.safetensors"]); audio.classifier(); print('sound classifier ok')"
 
 say "Quick check"
 .venv/bin/python - <<'EOF'

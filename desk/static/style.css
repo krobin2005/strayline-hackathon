@@ -103,3 +103,5 @@ textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .sub { display: none; }
   .msg { max-width: 94%; }
 }
+
+.frame-sheet { display: block; max-width: 100%; height: auto; margin-top: .5rem; }
