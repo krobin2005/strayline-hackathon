@@ -13,8 +13,8 @@ OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 VISION_MODEL = os.environ.get("DESK_VISION_MODEL", "qwen3-vl:8b")
 GENERAL_MODEL = os.environ.get("DESK_GENERAL_MODEL", "gemma4:e4b-it-q4_K_M")
 
-# Keep models loaded between questions so follow-ups are fast.
-KEEP_ALIVE = "30m"
+# Keep models loaded all day: a gap between demo rounds must not cost a ~50 s cold reload.
+KEEP_ALIVE = "24h"
 # Ollama reloads a model whenever the context size changes, so each model always uses one size.
 # The vision model needs room for up to 16 video frames.
 CONTEXT = {VISION_MODEL: 20480, GENERAL_MODEL: 8192}

@@ -2,7 +2,7 @@
 
 Flow: Gemma 4 E4B writes the code plus a small self-test → we run it in a separate process
 (no network, temporary folder, 10-second limit) → if it fails, the error goes back to the model
-once for a fix → the user sees the code, the output and whether its tests passed.
+(up to twice) for a fix → the user sees the code, the output and whether its tests passed.
 """
 
 import re
@@ -15,6 +15,7 @@ from . import Answer
 
 KIND = "code"
 PASS_MARKER = "ALL TESTS PASSED"
+MAX_ATTEMPTS = 3  # the first try plus two fixes
 
 _CODE_REQUEST = re.compile(
     r"\b(write|create|generate|implement|code|build|make)\b.{0,60}\b(function|script|program|code|class|"
@@ -54,7 +55,7 @@ class CodeResult:
 
 
 def write_and_test(question: str, file_name: str | None = None, file_data: bytes | None = None) -> CodeResult:
-    """Write code for the request, run it in the sandbox, and fix it once if it fails."""
+    """Write code for the request, run it in the sandbox, and fix it up to twice if it fails."""
     prompt = question.strip()
     if _CODE_STUB.search(prompt):
         prompt = ("Complete this Python code. Keep every function name and signature exactly as given, "
@@ -73,7 +74,8 @@ def write_and_test(question: str, file_name: str | None = None, file_data: bytes
     passed = ok and PASS_MARKER in output
     attempts = 1
 
-    if not passed:
+    # Up to two fix rounds: each gets the latest code and its error.
+    while not passed and attempts < MAX_ATTEMPTS:
         fix_prompt = (f"{prompt}\n\nYour previous code:\n```python\n{code}\n```\n\nRunning it gave:\n"
                       f"{output or '(no output)'}\n\nFix the code (and the self-test only if the test itself "
                       "was wrong). Reply with one ```python block.")
@@ -82,15 +84,16 @@ def write_and_test(question: str, file_name: str | None = None, file_data: bytes
         code = _extract_code(reply)
         ok, output = run_sandboxed(code, files)
         passed = ok and PASS_MARKER in output
-        attempts = 2
+        attempts += 1
     return CodeResult(code=code, passed=passed, output=output, attempts=attempts, seconds=seconds)
 
 
 def answer(question: str, file_name: str | None = None, file_data: bytes | None = None) -> Answer:
     r = write_and_test(question, file_name, file_data)
     status = "✅ Ran and passed its tests" if r.passed else "⚠️ The code ran into a problem"
-    if r.attempts == 2:
-        status += " (after one fix)"
+    if r.attempts > 1:
+        fixes = r.attempts - 1
+        status += f" (after {fixes} fix{'es' if fixes > 1 else ''})"
     # Output goes in its own block so the page shows it exactly (e.g. masked "****" isn't read as bold).
     text = f"```python\n{r.code}\n```\n\n{status}. Output:\n\n```text\n{r.output or '(no output)'}\n```"
     evidence = [f"Run in a sandbox: no network, temporary folder, {TIMEOUT_SECONDS}-second limit. "

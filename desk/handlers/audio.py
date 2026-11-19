@@ -154,7 +154,7 @@ def identify_sounds(wav_bytes: bytes) -> tuple[list[tuple[str, float]], bool, fl
             scores[label] = max(scores.get(label, 0.0), float(prediction["score"]))
 
     speech = any(scores.get(label, 0.0) >= 0.15 for label in SPEECH_LABELS)
-    strongest = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:3]
+    strongest = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:5]
     return [(label, score) for label, score in strongest if score >= 0.05], speech, time.monotonic() - start
 
 
