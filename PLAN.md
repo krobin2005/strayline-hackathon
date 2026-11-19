@@ -181,13 +181,14 @@ Two judges give one score each, so the pitch has to show all five inputs fast.
 | 0:10–0:50 | 2 Why we built this | Cyberattacks are the crisis of our time: the FAA ground stop (a router flooding the network; days before an attack was ruled out), the FBI's "major cyber incident", the NSA's router warning, AI agents doing the hacking. If federal networks get hit, a small college can too, and we don't want school data in a cloud AI |
 | 0:50–1:20 | 3 What Strayline is | A smoke detector for the campus network: learns normal, spots the stray, explains it privately offline |
 | 1:20–1:40 | 4 Live → console | Wi-Fi off; drag all five files onto Strayline Desk; back to the slides while it runs (~2 min) |
-| 1:40–2:20 | 5 How it works | Plain-code routing, the model that won each job, the two that failed |
-| 2:20–2:50 | 6 Results | 76 proven, 95 after review |
-| 2:50–3:40 | 7 Detector | Flood ranked #1 on an unseen day; the demo log's five planted intrusions |
+| 1:40–2:10 | 5 How it works | Plain-code routing and the model that won each job |
+| 2:10–2:35 | 6 Our own cyber test set | We built a security case for every input; what Desk does with each |
+| 2:35–3:00 | 7 Kaggle results | On the organizers' Kaggle practice pack: 76 proven, 95 after review |
+| 3:00–3:40 | 8 Detector | Flood ranked #1 on an unseen day; the demo log's five planted intrusions |
 | 3:40–4:35 | Console | Walk the answers; live follow-ups: runbook phone number ("not in the document"), the code question with no file |
-| 4:35–5:00 | 8 Pilot | Bates IT agreed to a pilot on campus traffic; thank you |
+| 4:35–5:00 | 9 Pilot | Bates IT agreed to a pilot on campus traffic; thank you |
 
-Slide 9 (limits) is a backup after the close, for the final round or questions. Speaker notes on every slide carry these timings. Deck: "Strayline Desk – IEEE AI Hackathon 2026 pitch v4 (5 min)" in Kyle's Google Drive.
+Slide 4 has a ▶ Run the live case button (opens localhost:8000/?case=demo). Speaker notes on every slide carry these timings. Deck: "Strayline Desk – IEEE AI Hackathon 2026 pitch v4 (5 min)" in Kyle's Google Drive.
 
 **15-minute final:** the same demo slower, then the full network-log replay, architecture and model choices, detailed test results, limits, impact evidence, and questions.
 
