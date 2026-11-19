@@ -112,6 +112,7 @@ function fillAnswer(el, result) {
   if (result.evidence && result.evidence.length) {
     const d = document.createElement("details");
     d.className = "evidence";
+    d.open = true;
     const s = document.createElement("summary");
     s.textContent = result.kind === "document"
       ? `Based on ${result.evidence.length} passage${result.evidence.length > 1 ? "s" : ""}`
