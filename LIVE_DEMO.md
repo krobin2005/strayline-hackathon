@@ -1,6 +1,14 @@
 # Live demo with Wi-Fi off
 
-Run these in order on the presentation laptop. Everything works offline once `setup.sh` has run.
+Everything works offline once `setup.sh` has run.
+
+## Quick start: one double-click
+
+Turn Wi-Fi off, quit Chrome, ChatGPT and Claude, then double-click **`start_demo.command`** in the repo (on Kyle's laptop there's also `Start Strayline Demo.command` on the Desktop). From Terminal: `./start_demo.command`.
+
+It checks Wi-Fi and memory-hungry apps, starts Ollama, builds the logs file if needed, starts the app offline, waits until both models are loaded (about a minute), then opens Safari and the folder of demo files. Keep its Terminal window open during the demo; Ctrl+C or closing the window stops the app. If a step fails it says why, such as an old copy of the app still holding port 8000.
+
+The manual steps below do the same thing, if you'd rather run them one by one.
 
 ## Before you start
 
