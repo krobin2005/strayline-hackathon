@@ -43,6 +43,25 @@ class Attachment:
 _attachments: dict[str, Attachment] = {}
 
 
+# The live demo case (demo/README.md), in pitch order. Opening /?case=demo makes the page load these
+# and run them one after another, so the presenter can start the case from a link in the slides.
+ROOT = Path(__file__).resolve().parent.parent
+DEMO_CASE = [ROOT / "demo/recovery-review.mp4", ROOT / "demo/recovery-notice.png", ROOT / "demo/callback.wav",
+             ROOT / "demo/runbook.md", ROOT / "data/demo/campus_afternoon.csv"]
+
+
+@app.get("/api/demo-case")
+def demo_case():
+    return [{"index": i, "name": f"{i + 1} {p.name}"} for i, p in enumerate(DEMO_CASE) if p.exists()]
+
+
+@app.get("/api/demo-case/{index}")
+def demo_case_file(index: int):
+    if not 0 <= index < len(DEMO_CASE) or not DEMO_CASE[index].exists():
+        raise HTTPException(404, "That demo file isn't on this laptop.")
+    return FileResponse(DEMO_CASE[index])
+
+
 class Ask(BaseModel):
     question: str = ""
     attachment_id: str | None = None

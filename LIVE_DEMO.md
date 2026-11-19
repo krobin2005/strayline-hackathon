@@ -64,6 +64,16 @@ On a laptop without that Desktop folder, the same files are in the repo:
 open ~/Projects/strayline-hackathon/demo ~/Projects/strayline-hackathon/data/demo
 ```
 
+## Start the case from the slides (one click)
+
+With the app running (start it before the pitch), the **▶ Run the live case** button on slide 4 opens
+`http://localhost:8000/?case=demo`. The page loads the five demo files from this laptop and runs them in
+order, exactly as if they had been dragged in. It works with Wi-Fi off, because the address is the laptop itself.
+The link needs the app already running: a link can open a page, but not start a program.
+
+To present offline, open the deck in Google Slides while still online with offline access on, or download it
+(File → Download → Microsoft PowerPoint) and present it in Keynote or PowerPoint; the link works in all three.
+
 ## Run the whole case in the background (recommended)
 
 In the pitch this happens on slide 4 (about 1:20), and you come back to the console after the detector slide (about 3:40); see PLAN.md §6.

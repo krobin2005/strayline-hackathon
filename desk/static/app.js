@@ -410,3 +410,26 @@ input.addEventListener("input", autosize);
 
 checkHealth();
 setInterval(checkHealth, 15000);
+
+// Opening /?case=demo (a link in the slides) loads the five demo files from this laptop and runs them as
+// one case, exactly as if they had been dropped on the page.
+const MIME = { mp4: "video/mp4", png: "image/png", wav: "audio/wav", md: "text/markdown", csv: "text/csv" };
+async function runDemoCaseFromLink() {
+  if (new URLSearchParams(location.search).get("case") !== "demo") return;
+  history.replaceState(null, "", location.pathname); // a reload shouldn't start it again
+  try {
+    const list = await (await fetch("/api/demo-case")).json();
+    const files = [];
+    for (const item of list) {
+      const blob = await (await fetch(`/api/demo-case/${item.index}`)).blob();
+      files.push(new File([blob], item.name, { type: MIME[item.name.split(".").pop()] || blob.type }));
+    }
+    if (files.length) runCase(files);
+  } catch {
+    hideWelcome();
+    const el = document.createElement("div");
+    log.appendChild(el);
+    fillError(el, "Couldn't load the demo files from this laptop.");
+  }
+}
+runDemoCaseFromLink();
