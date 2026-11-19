@@ -258,8 +258,16 @@ function handleFiles(files) {
 }
 
 // Drop files anywhere on the page. Without this, Safari drops the file's path into the text box.
+// Safari labels files from Finder as "Files", "public.file-url" or "text/uri-list" depending on version.
+const FILE_DRAG_TYPES = ["Files", "public.file-url", "text/uri-list"];
 document.addEventListener("dragover", (e) => {
-  if ([...e.dataTransfer.types].includes("Files")) { e.preventDefault(); document.body.classList.add("dropping"); }
+  if ([...e.dataTransfer.types].some((t) => FILE_DRAG_TYPES.includes(t))) {
+    e.preventDefault();
+    document.body.classList.add("dropping");
+  }
+}, true);
+document.addEventListener("dragenter", (e) => {
+  if ([...e.dataTransfer.types].some((t) => FILE_DRAG_TYPES.includes(t))) e.preventDefault();
 }, true);
 document.addEventListener("dragleave", (e) => {
   if (!e.relatedTarget) document.body.classList.remove("dropping");

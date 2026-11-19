@@ -23,6 +23,15 @@ app = FastAPI(title="Strayline Desk")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
+@app.middleware("http")
+async def no_cache(request, call_next):
+    """Browsers must always fetch the current page code; Safari kept serving an old app.js."""
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @dataclass
 class Attachment:
     name: str
