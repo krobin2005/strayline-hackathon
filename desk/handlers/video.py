@@ -90,15 +90,24 @@ def contact_sheet(frames: list[np.ndarray]) -> tuple[bytes, int]:
     return jpeg.tobytes(), columns
 
 
+def _jpeg(frame: np.ndarray) -> bytes:
+    ok, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+    if not ok:
+        raise VideoError("Couldn't prepare video frames.")
+    return jpeg.tobytes()
+
+
 def answer(data: bytes, filename: str, question: str) -> Answer:
     start = time.monotonic()
     frames, times, length = sample_frames(data, filename)
-    sheet_bytes, columns = contact_sheet(frames)
-    prompt = (f"This contact sheet shows {len(frames)} equally spaced moments in one "
-              f"{length:.1f}-second clip, in {columns} columns. Read left to right, row by row. "
-              "A repeated object in different panels may be the same object moving. "
-              f"Answer briefly.\n\n{question.strip() or DEFAULT_QUESTION}")
-    text, _ = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=[sheet_bytes], max_tokens=1024)
+    # The model gets the frames as separate images, in order. A single contact-sheet image was ~4x
+    # faster but, on the practice pack, came back empty on 6/15 clips and confused motion and counts
+    # (6/15 right vs 11/15 with separate frames). The sheet is still shown to the user as evidence.
+    sheet_bytes, _ = contact_sheet(frames)
+    labels = ", ".join(f"frame {i + 1} at {t:.1f} s" for i, t in enumerate(times))
+    prompt = (f"These are {len(frames)} frames from a {length:.1f}-second video, in order: {labels}.\n\n"
+              f"{question.strip() or DEFAULT_QUESTION}")
+    text, _ = llm.chat(llm.VISION_MODEL, prompt, system=SYSTEM, media=[_jpeg(f) for f in frames], max_tokens=2048)
     evidence = [f"{len(frames)} frames sampled from a {length:.1f} s clip at: "
                 + ", ".join(f"{t:.1f} s" for t in times)]
     return Answer(text=text, kind=VIDEO, model=llm.VISION_MODEL, seconds=time.monotonic() - start, evidence=evidence,

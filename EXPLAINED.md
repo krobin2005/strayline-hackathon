@@ -83,12 +83,12 @@ The organizers gave us 100 practice questions in the same format the judges will
 
 | Input | Score | How fast |
 |---|---|---|
-| Image | 23 / 25 | ~12 s |
-| Audio | 14 / 20 | ~6 s |
+| Image | 23 / 25 | ~8 s |
+| Audio | 18 / 20 | ~7 s |
 | Text | **20 / 20** | ~5 s |
-| Video | 9 / 15 | ~65 s (the slow one) |
-| Code | **20 / 20** | ~17 s |
-| **Total** | **86 / 100** | |
+| Video | 13 / 15 | ~60 s (the slow one) |
+| Code | 19 / 20 | ~19 s |
+| **Total** | **93 / 100** (71 proven by the strict auto-checker; the rest checked by our AI assistant, to be confirmed by us) | |
 
 **What it's bad at (we say this out loud, and judges like honesty):**
 - **Video is slow,** about a minute per clip, and it struggles to count things that appear one at a time.

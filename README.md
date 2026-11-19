@@ -158,17 +158,20 @@ Per host, per clock minute: `src_flows_1m`, `src_dst_hosts_1m`, `src_dst_ports_1
 - **Harness:** `python -m desk.eval` runs every item through the same handlers as the app and writes `results/test_results.md` (aggregates only). Scoring: code by the pack's own unit tests in the sandbox; unanswerable text questions must say "not in the document"; counts by the number; transcripts by word error rate (≤ 25%); short answers by normalized match; long free-form answers marked "needs review" for a person instead of guessed. Checked on a synthetic stand-in pack: 10/11 (the miss was a pure test tone, see Limits).
 - **Detector:** share of attack connections alerted and the false-alarm rate on the demo day's benign traffic.
 
-**Practice pack, 100 items (Nov 18), [full table](results/test_results.md): 86/100 correct automatically, 5 more need a person to check.**
+**Practice pack, 100 items (Nov 18), [full table](results/test_results.md): 71/100 proven by the strict automatic scorer; 93/100 after a provisional review of the free-form answers by our AI coding assistant. A teammate still needs to confirm that review.**
 
-| Input | Correct | Median time |
-|---|---|---|
-| Image | 23/25 | 11.5 s |
-| Audio | 14/20 (+2 to check) | 5.6 s |
-| Text | 20/20 | 5.3 s |
-| Video | 9/15 (+3 to check) | 65 s |
-| Code | 20/20 (pack's unit tests) | 17 s |
+| Input | Proven automatically | After provisional review | Median time |
+|---|---|---|---|
+| Image | 21/25 | 23/25 | 8 s |
+| Audio | 11/20 | 18/20 | 7 s |
+| Text | 18/20 | 20/20 | 5 s |
+| Video | 2/15 | 13/15 | 62 s |
+| Code | 19/20 (pack's unit tests) | 19/20 | 19 s |
 
-What moved the numbers: an AudioSet sound classifier lifted sound items from ~1/10 (Gemma 4 alone) to most correct; a "details don't match → not in the document" rule fixed the last text miss.
+What moved the numbers:
+- **Sounds:** an AudioSet classifier went from about 1/10 with Gemma 4 alone to about 8/10.
+- **Text:** a rule that says "if the details don't match, it's not in the document".
+- **Video:** separate frames instead of one contact sheet (13/15 vs 6/15).
 
 ---
 

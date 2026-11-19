@@ -1,6 +1,6 @@
 # Next steps
 
-Where we are (Wed Nov 18, evening): the app works end to end, offline, for all five inputs plus logs. The practice pack scores **86/100** (image 23/25, audio 14/20, text 20/20, video 9/15, code 20/20). Everything is on GitHub.
+Where we are (Wed Nov 18, evening): the app works end to end, offline, for all five inputs plus logs. The practice pack scores **71/100 proven automatically, 93/100 after a provisional review** (image 23/25, audio 18/20, text 20/20, video 13/15, code 19/20; a teammate should confirm the review). Everything is on GitHub.
 
 **Hard deadline: code must be in our IEEE GitHub repo by end of day Thursday Nov 19.** Write access is cut after that. Friday is presentations only, with no code changes.
 
