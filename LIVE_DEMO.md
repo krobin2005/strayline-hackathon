@@ -66,6 +66,8 @@ open ~/Projects/strayline-hackathon/demo ~/Projects/strayline-hackathon/data/dem
 
 ## Run the whole case in the background (recommended)
 
+In the pitch this happens on slide 5 (about 1:30), and you come back to the console after slide 9 (about 3:45); see PLAN.md §6.
+
 Select all five numbered files in the Finder window (⌘A, or drag a box around them) and drag them onto the Strayline page. Drop them anywhere on the page, not just the text box. You can also press ＋ and pick several files.
 
 The page analyses them one after another, in filename order, while you carry on with the slides: video (~60 s), screenshot, voicemail, runbook, then the logs. The whole case takes about 2 minutes. When it says "Case finished", go back to the page and walk through the answers.

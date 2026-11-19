@@ -175,12 +175,18 @@ Per the README: one laptop, everyone on every task, with P1/P2/P3 as a shared ch
 
 Two judges give one score each, so the pitch has to show all five inputs fast.
 
-| Time | Beat |
-|---|---|
-| 0:00–0:30 | **User and problem.** A campus IT analyst needs to triage a suspicious report while keeping the evidence on the laptop. |
-| 0:30–2:05 | **Start video first.** Use the team's existing security clip. While it runs, explain the local models and why Strayline exposes each answer's supporting evidence. Show the sampled frames when the answer returns. |
-| 2:05–4:20 | **Finish the same case with the other four inputs.** Show an image answer, the audio transcript, a supported runbook answer plus a detail the runbook doesn't contain, and a short Python function with its test result. Show the analyst's next action. |
-| 4:20–5:00 | **Proof.** Show the organizer practice-pack counts by modality, distinguish automatically verified from provisional AI-reviewed results, name the hardware, and share any measured team rehearsal result. |
+| Time | Slide / screen | Beat |
+|---|---|---|
+| 0:00–0:10 | 1 Title | Who we are; Strayline Desk in one line |
+| 0:10–0:40 | 2 Problem | Campus evidence holds student data, so it can't go to a cloud AI |
+| 0:40–1:10 | 3 What Strayline is | Network behaviour, not files: flags the machine that strays from normal. Classifier + anomaly score; malware still has to scan, spread or upload |
+| 1:10–1:30 | 4 What we feed it | Each file is evidence the team already handles, and a line of the brief; all data fictional, synthetic or lab |
+| 1:30–1:50 | 5 Live case → console | Wi-Fi off; drag all five files onto Strayline Desk; back to the slides while it runs (~2 min) |
+| 1:50–3:45 | 6–9 | Architecture, models, results (76 proven, 95 after review), detector |
+| 3:45–4:40 | Console | Walk the answers; live follow-ups: runbook phone number ("not in the document"), the code question with no file |
+| 4:40–5:00 | 11 Pilot | Bates IT agreed to a pilot on campus traffic; thank you |
+
+Slide 10 (limits) is for the final round or questions. Speaker notes on every slide carry these timings.
 
 **15-minute final:** the same demo slower, then the full network-log replay, architecture and model choices, detailed test results, limits, impact evidence, and questions.
 
