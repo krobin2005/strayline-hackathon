@@ -288,36 +288,50 @@ const CASE_DEFAULTS = {
 };
 
 async function runCase(files) {
+  const typed = input.value.trim();
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  await runPlan(files.map((file) => ({ file, question: typed || null })));
+}
+
+// Run steps in order. Each step is {file?, question}; a null question uses the default for the file's kind.
+// A file used by several steps is uploaded once.
+async function runPlan(steps) {
   if (uploading || answering) return;
   answering = true;
   sendButton.disabled = true;
   uploadVersion++;
   attachment = null;
-  const typed = input.value.trim();
   input.value = "";
   autosize();
-  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const uploaded = new Map();
   let done = 0;
-  for (const [i, file] of files.entries()) {
+  for (const [i, step] of steps.entries()) {
     chip.hidden = false;
-    document.getElementById("chip-kind").textContent = `Case ${i + 1} of ${files.length}`;
-    document.getElementById("chip-name").textContent = file.name;
-    let att;
-    try {
-      att = await sendFile(file);
-    } catch (err) {
-      hideWelcome();
-      const el = document.createElement("div");
-      log.appendChild(el);
-      fillError(el, `${file.name}: ${err.message}`);
-      continue;
+    document.getElementById("chip-kind").textContent = `Case ${i + 1} of ${steps.length}`;
+    document.getElementById("chip-name").textContent = step.file ? step.file.name : step.question;
+    let att = null;
+    if (step.file) {
+      att = uploaded.get(step.file.name);
+      if (!att) {
+        try {
+          att = await sendFile(step.file);
+          uploaded.set(step.file.name, att);
+        } catch (err) {
+          hideWelcome();
+          const el = document.createElement("div");
+          log.appendChild(el);
+          fillError(el, `${step.file.name}: ${err.message}`);
+          continue;
+        }
+      }
     }
-    if (await askAbout(typed || CASE_DEFAULTS[att.kind] || "", att)) done++;
+    const question = step.question ?? (att ? CASE_DEFAULTS[att.kind] || "" : "");
+    if (await askAbout(question, att)) done++;
   }
   chip.hidden = true;
   const note = document.createElement("div");
   note.className = "msg bot";
-  note.textContent = `Case finished: ${done} of ${files.length} files answered. ` +
+  note.textContent = `Case finished: ${done} of ${steps.length} answered. ` +
     "Press \"Ask about this file\" on any of them to ask a follow-up.";
   log.appendChild(note);
   scrollDown();
@@ -414,6 +428,27 @@ setInterval(checkHealth, 15000);
 // Opening /?case=demo (a link in the slides) loads the five demo files from this laptop and runs them as
 // one case, exactly as if they had been dropped on the page.
 const MIME = { mp4: "video/mp4", png: "image/png", wav: "audio/wav", md: "text/markdown", csv: "text/csv" };
+// The questions an analyst would ask about each demo file (demo/README.md). Answers are produced live.
+const DEMO_QUESTIONS = {
+  "recovery-review.mp4": ["What was the last action, and when did it happen?"],
+  "recovery-notice.png": ["What is the ticket number, and what happened at 14:03?"],
+  "callback.wav": ["What does the caller want checked, and when did they see the notice?"],
+  "runbook.md": ["Which group handles this ticket?", "What is the phone number for the group that handles this ticket?"],
+  "campus_afternoon.csv": ["Which incident should I look at first?", "What is int-host-5 doing across incidents 2 and 4?"],
+};
+const DEMO_CODE_QUESTION = "Write a Python function that counts distinct ticket IDs in a list, and test it on a list with a duplicate.";
+
+function demoPlan(files) {
+  const steps = [];
+  for (const file of files) {
+    const base = file.name.replace(/^\d+\s+/, "");
+    if (base.endsWith(".csv")) steps.push({ question: DEMO_CODE_QUESTION }); // code goes before the logs
+    for (const question of DEMO_QUESTIONS[base] || [null]) steps.push({ file, question });
+  }
+  if (!steps.some((s) => s.question === DEMO_CODE_QUESTION)) steps.push({ question: DEMO_CODE_QUESTION });
+  return steps;
+}
+
 async function runDemoCaseFromLink() {
   if (new URLSearchParams(location.search).get("case") !== "demo") return;
   history.replaceState(null, "", location.pathname); // a reload shouldn't start it again
@@ -424,7 +459,7 @@ async function runDemoCaseFromLink() {
       const blob = await (await fetch(`/api/demo-case/${item.index}`)).blob();
       files.push(new File([blob], item.name, { type: MIME[item.name.split(".").pop()] || blob.type }));
     }
-    if (files.length) runCase(files);
+    if (files.length) runPlan(demoPlan(files));
   } catch {
     hideWelcome();
     const el = document.createElement("div");
